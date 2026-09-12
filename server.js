@@ -9,6 +9,7 @@ const pdfParse = require('pdf-parse');
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use((req, res, next) => { req.url = req.url.replace(/\/{2,}/g, '/'); next(); });
 
 // Basic health check endpoints for cloud deployment platforms
 app.get('/', (req, res) => res.json({ status: 'ok', service: 'Scout Job Automation API' }));
@@ -262,3 +263,4 @@ app.all('/apply', async (req, res) => {
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`Scout apply-service listening on ${PORT}`));
+

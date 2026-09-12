@@ -40,7 +40,8 @@ export default function Dashboard() {
   const [loadingId, setLoadingId] = useState<number | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ id: number; msg: string } | null>(null);
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+  const rawApiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+  const API_BASE = rawApiBase.replace(/\/+$/, "");
 
   const handleApply = async (id: number, url: string) => {
     setLoadingId(id); setStatusMsg(null);
@@ -187,3 +188,4 @@ export default function Dashboard() {
     </div>
   );
 }
+
