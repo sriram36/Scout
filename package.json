@@ -1,26 +1,30 @@
-{
-  "name": "scout",
-  "version": "1.0.0",
-  "description": "Scout job discovery and automation platform",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "dependencies": {
-    "@supabase/supabase-js": "^2.116.0",
-    "axios": "^1.20.0",
-    "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
-    "express": "^5.2.1",
-    "node-cron": "^4.6.0",
-    "node-telegram-bot-api": "^2.1.0",
-    "pdf-parse": "^1.1.1",
-    "playwright": "^1.63.0"
-  }
+﻿{
+    "name":  "scout",
+    "version":  "1.0.0",
+    "description":  "Scout job discovery and automation platform",
+    "main":  "server.js",
+    "scripts":  {
+                    "start":  "node server.js",
+                    "dev":  "node server.js",
+                    "test":  "echo \"Error: no test specified\" \u0026\u0026 exit 1",
+                    "build":  "npx playwright install chromium || true",
+                    "postinstall":  "npx playwright install chromium || true"
+                },
+    "keywords":  [
+
+                 ],
+    "author":  "",
+    "license":  "ISC",
+    "type":  "commonjs",
+    "dependencies":  {
+                         "@supabase/supabase-js":  "^2.116.0",
+                         "axios":  "^1.20.0",
+                         "cors":  "^2.8.6",
+                         "dotenv":  "^17.4.2",
+                         "express":  "^5.2.1",
+                         "node-cron":  "^4.6.0",
+                         "node-telegram-bot-api":  "^2.1.0",
+                         "pdf-parse":  "^1.1.1",
+                         "playwright":  "^1.63.0"
+                     }
 }

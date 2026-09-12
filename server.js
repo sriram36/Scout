@@ -1,4 +1,4 @@
-require('dotenv').config();
+﻿require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { chromium } = require('playwright');
@@ -9,7 +9,10 @@ const pdfParse = require('pdf-parse');
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use((req, res, next) => { req.url = req.url.replace(/\/{2,}/g, '/'); next(); });
+app.use((req, res, next) => {
+  req.url = req.url.replace(/\/{2,}/g, '/');
+  next();
+});
 
 // Basic health check endpoints for cloud deployment platforms
 app.get('/', (req, res) => res.json({ status: 'ok', service: 'Scout Job Automation API' }));
@@ -81,12 +84,16 @@ app.post('/inspect', async (req, res) => {
   const { url } = req.body;
   if (!url) return res.status(400).json({ error: 'Missing job URL' });
 
-  const browser = await chromium.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
-  });
-  const page = await browser.newPage();
+  let browser = null;
   try {
+    const isCloud = process.platform === 'linux' || !!(process.env.RENDER || process.env.RAILWAY_ENVIRONMENT || process.env.NODE_ENV === 'production');
+    const isHeadless = process.env.HEADLESS ? process.env.HEADLESS === 'true' : isCloud;
+
+    browser = await chromium.launch({
+      headless: isHeadless,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
+    });
+    const page = await browser.newPage();
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
     const screenshot = await page.screenshot({ encoding: 'base64' });
@@ -114,55 +121,82 @@ app.post('/inspect', async (req, res) => {
     await browser.close();
     res.json({ inputs, screenshot });
   } catch(err) {
-    await browser.close();
+    if (browser) { try { await browser.close(); } catch(e) {} }
     res.status(500).json({ error: err.message });
   }
 });
 
 app.all('/apply', async (req, res) => {
-  const url = (req.body && req.body.url) || (req.query && req.query.url);
-  
-  if (!url) {
-    return res.status(400).json({ error: 'Missing job URL' });
-  }
-
-  // Load profile from profile.json file or PROFILE_JSON environment variable
-  let profile = {};
+  let browser = null;
   try {
+    const url = (req.body && req.body.url) || (req.query && req.query.url);
+    if (!url) {
+      return res.status(400).json({ error: 'Missing job URL' });
+    }
+
+    // Load profile from file, env, or fallback default
+    let profile = {};
     const profilePath = path.join(__dirname, 'profile.json');
     if (fs.existsSync(profilePath)) {
-      profile = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
+      try {
+        profile = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
+      } catch (e) {
+        console.warn('Could not parse profile.json:', e.message);
+      }
     } else if (process.env.PROFILE_JSON) {
-      profile = JSON.parse(process.env.PROFILE_JSON);
-    } else {
-      throw new Error('Neither profile.json nor PROFILE_JSON environment variable is available.');
+      try {
+        profile = JSON.parse(process.env.PROFILE_JSON);
+      } catch(e) {
+        console.warn('Could not parse PROFILE_JSON env var:', e.message);
+      }
     }
     
-    // Dynamically parse the PDF resume for the LLM if file exists on system
+    // Sensible fallbacks if profile fields missing
+    profile.first_name = profile.first_name || process.env.CANDIDATE_FIRST_NAME || "Sriram";
+    profile.last_name = profile.last_name || process.env.CANDIDATE_LAST_NAME || "Kolli";
+    profile.email = profile.email || process.env.CANDIDATE_EMAIL || "kollisriram6@gmail.com";
+    profile.phone = profile.phone || process.env.CANDIDATE_PHONE || "+91 9581697955";
+    profile.location = profile.location || process.env.CANDIDATE_LOCATION || "India";
+
+    // Dynamically parse the PDF resume if exists
     if (profile.resume_path && fs.existsSync(profile.resume_path)) {
-      console.log('Parsing PDF resume...');
-      const dataBuffer = fs.readFileSync(profile.resume_path);
-      const pdfData = await pdfParse(dataBuffer);
-      profile.resume_text = pdfData.text;
+      try {
+        console.log('Parsing PDF resume...');
+        const dataBuffer = fs.readFileSync(profile.resume_path);
+        const pdfData = await pdfParse(dataBuffer);
+        profile.resume_text = pdfData.text;
+      } catch (e) {
+        console.warn('Could not parse PDF resume:', e.message);
+      }
     }
-  } catch (err) {
-    console.error('Could not load profile or parse resume:', err.message);
-    return res.status(500).json({ error: 'Candidate profile not found or invalid.' });
-  }
-  
-  const isHeadless = process.env.HEADLESS === 'true';
-  const browser = await chromium.launch({
-    headless: isHeadless,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
-  });
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  
-  try {
+
+    // Auto-detect headless mode: default to true on cloud/Linux, false on local desktop
+    const isCloud = process.platform === 'linux' || !!(process.env.RENDER || process.env.RAILWAY_ENVIRONMENT || process.env.NODE_ENV === 'production');
+    const isHeadless = process.env.HEADLESS ? process.env.HEADLESS === 'true' : isCloud;
+
+    console.log(`Launching Playwright (headless: ${isHeadless})...`);
+    browser = await chromium.launch({
+      headless: isHeadless,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process',
+        '--disable-gpu'
+      ]
+    });
+
+    const context = await browser.newContext();
+    const page = await context.newPage();
+
+    console.log(`Navigating to ${url}...`);
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-    // Scrape the visible text of the page to use as the Job Description context
-    const jobDescription = await page.evaluate(() => document.body.innerText);
+    // Scrape visible text
+    const jobDescription = await page.evaluate(() => document.body.innerText || '');
 
     // Extract inputs
     const inputs = await page.$$eval('input, textarea, select', els =>
@@ -183,22 +217,19 @@ app.all('/apply', async (req, res) => {
     // Separate standard fields, EEOC fields, and custom questions
     const standardFields = ['first_name', 'last_name', 'email', 'phone'];
     const eeocKeywords = ['gender', 'hispanic', 'veteran', 'disability'];
-    
     const customQuestions = [];
 
-    // Fill standard high-confidence fields
+    // Fill standard fields
     for (const input of inputs) {
       if (!input.id) continue;
       
       const lowerId = input.id.toLowerCase();
       const lowerLabel = (input.label || '').toLowerCase();
       
-      // Skip EEOC explicitly per PRD Section 4
       if (eeocKeywords.some(kw => lowerId.includes(kw) || lowerLabel.includes(kw))) {
         continue;
       }
 
-      // Handle resume file upload if file exists
       if (lowerId === 'resume' && input.type === 'file' && profile.resume_path && fs.existsSync(profile.resume_path)) {
         try {
           await page.locator(`id=${input.id}`).setInputFiles(profile.resume_path);
@@ -213,19 +244,16 @@ app.all('/apply', async (req, res) => {
           console.warn(`Could not fill standard field ${input.id}`);
         }
       } 
-      // Collect custom questions
       else if (input.id.startsWith('question_') && (input.type === 'text' || input.tag === 'TEXTAREA')) {
         customQuestions.push(input);
       }
     }
 
     let generatedAnswers = {};
-    // Query LLM for custom questions
     if (customQuestions.length > 0 && profile) {
       console.log(`Querying LLM for ${customQuestions.length} custom questions...`);
       generatedAnswers = await answerCustomQuestions(customQuestions, profile, jobDescription);
       
-      // Fill LLM answers
       for (const [id, answer] of Object.entries(generatedAnswers)) {
         if (answer) {
           try {
@@ -237,14 +265,13 @@ app.all('/apply', async (req, res) => {
       }
     }
     
-    // In headless cloud mode: capture screenshot of completed form and close browser to prevent memory leaks
     let screenshotBase64 = null;
     if (isHeadless) {
       screenshotBase64 = await page.screenshot({ fullPage: true, encoding: 'base64' });
       await browser.close();
+      browser = null;
     }
 
-    // Return human review status (we never submit automatically)
     res.json({ 
       status: 'AWAITING_HUMAN_REVIEW', 
       message: isHeadless 
@@ -256,11 +283,18 @@ app.all('/apply', async (req, res) => {
 
   } catch (error) {
     console.error('Apply error:', error);
-    try { await browser.close(); } catch(e) {}
+    if (browser) {
+      try { await browser.close(); } catch(e) {}
+    }
     res.status(500).json({ error: error.message });
   }
 });
 
+// Global Express error handler returning JSON instead of HTML
+app.use((err, req, res, next) => {
+  console.error('Unhandled server error:', err);
+  res.status(500).json({ error: err.message || 'Internal Server Error' });
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`Scout apply-service listening on ${PORT}`));
-

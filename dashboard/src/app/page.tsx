@@ -4,7 +4,7 @@ import { useState } from "react";
 
 const INITIAL_JOBS = [
   { id: 1, title: "Senior Software Engineer, Platform", company: "Figma", location: "San Francisco, CA", salary: "$180k - $240k", source: "Himalayas", postedAt: "2h ago", url: "https://boards.greenhouse.io/figma/jobs/5426468004", tags: ["Node.js", "React", "WebGL"], color: "violet", status: "Discovered" },
-  { id: 2, title: "Full Stack Developer", company: "Linear", location: "Remote", salary: "$160k - $210k", source: "Arbeitnow", postedAt: "5h ago", url: "https://linear.app/jobs/full-stack", tags: ["TypeScript", "GraphQL", "PostgreSQL"], color: "blue", status: "Discovered" },
+  { id: 2, title: "Full Stack Developer", company: "Linear", location: "Remote", salary: "$160k - $210k", source: "Arbeitnow", postedAt: "5h ago", url: "https://boards.greenhouse.io/cloudflare/jobs/5643445", tags: ["TypeScript", "GraphQL", "PostgreSQL"], color: "blue", status: "Discovered" },
   { id: 3, title: "Backend Engineer, Data", company: "Vercel", location: "Remote", salary: "$175k - $230k", source: "Adzuna", postedAt: "Yesterday", url: "https://vercel.com/careers/backend", tags: ["Rust", "Node.js", "AWS"], color: "pink", status: "Discovered" },
 ];
 
