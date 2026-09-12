@@ -1,11 +1,25 @@
-"use client";
+﻿"use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
-const INITIAL_JOBS = [
+interface Job {
+  id: number;
+  title: string;
+  company: string;
+  location: string;
+  salary: string;
+  source: string;
+  postedAt: string;
+  url: string;
+  tags: string[];
+  color: string;
+  status: string;
+}
+
+const INITIAL_JOBS: Job[] = [
   { id: 1, title: "Senior Software Engineer, Platform", company: "Figma", location: "San Francisco, CA", salary: "$180k - $240k", source: "Himalayas", postedAt: "2h ago", url: "https://boards.greenhouse.io/figma/jobs/5426468004", tags: ["Node.js", "React", "WebGL"], color: "violet", status: "Discovered" },
-  { id: 2, title: "Full Stack Developer", company: "Linear", location: "Remote", salary: "$160k - $210k", source: "Arbeitnow", postedAt: "5h ago", url: "https://boards.greenhouse.io/cloudflare/jobs/5643445", tags: ["TypeScript", "GraphQL", "PostgreSQL"], color: "blue", status: "Discovered" },
-  { id: 3, title: "Backend Engineer, Data", company: "Vercel", location: "Remote", salary: "$175k - $230k", source: "Adzuna", postedAt: "Yesterday", url: "https://vercel.com/careers/backend", tags: ["Rust", "Node.js", "AWS"], color: "pink", status: "Discovered" },
+  { id: 2, title: "Full Stack Developer", company: "Cloudflare", location: "Remote", salary: "$160k - $210k", source: "Arbeitnow", postedAt: "5h ago", url: "https://boards.greenhouse.io/cloudflare/jobs/5643445", tags: ["TypeScript", "GraphQL", "PostgreSQL"], color: "blue", status: "Discovered" },
+  { id: 3, title: "Backend Engineer, Data", company: "Automattic", location: "Remote", salary: "$175k - $230k", source: "Adzuna", postedAt: "Yesterday", url: "https://boards.greenhouse.io/automattic/jobs/1410972", tags: ["Rust", "Node.js", "AWS"], color: "pink", status: "Discovered" },
 ];
 
 function Icon({ name }: { name: string }) {
@@ -36,12 +50,39 @@ function StatCard({ label, value, change, icon, accent }: { label: string; value
 }
 
 export default function Dashboard() {
-  const [jobs, setJobs] = useState(INITIAL_JOBS);
+  const [jobs, setJobs] = useState<Job[]>(INITIAL_JOBS);
   const [loadingId, setLoadingId] = useState<number | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ id: number; msg: string } | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const rawApiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
   const API_BASE = rawApiBase.replace(/\/+$/, "");
+
+  const fetchLiveJobs = async () => {
+    setIsRefreshing(true);
+    try {
+      const res = await fetch(`${API_BASE}/jobs`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.jobs && Array.isArray(data.jobs) && data.jobs.length > 0) {
+          setJobs(prev => {
+            const applied = prev.filter(j => j.status === "Applied");
+            const appliedUrls = new Set(applied.map(j => j.url));
+            const newDiscovered = data.jobs.filter((j: Job) => !appliedUrls.has(j.url));
+            return [...applied, ...newDiscovered];
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("Could not fetch live discovery jobs, keeping current list:", err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLiveJobs();
+  }, [API_BASE]);
 
   const handleApply = async (id: number, url: string) => {
     setLoadingId(id); setStatusMsg(null);
@@ -115,7 +156,7 @@ export default function Dashboard() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand"><span className="brand-mark"><Icon name="spark" /></span><span>scout<span className="brand-dot">.</span></span></div>
-        <div className="workspace"><div className="workspace-avatar">AS</div><div><small>WORKSPACE</small><strong>Alex&apos;s search</strong></div><Icon name="chevron" /></div>
+        <div className="workspace"><div className="workspace-avatar">SK</div><div><small>WORKSPACE</small><strong>Sriram&apos;s search</strong></div><Icon name="chevron" /></div>
         <nav className="nav-list" aria-label="Main navigation">
           <p className="nav-label">Command center</p>
           <a className="nav-item active" href="#overview"><Icon name="grid" />Overview</a>
@@ -126,7 +167,7 @@ export default function Dashboard() {
         </nav>
         <div className="sidebar-bottom">
           <div className="service-status"><span className="status-dot" /><div><strong>Automation service</strong><small>Connected and ready</small></div></div>
-          <div className="profile"><div className="profile-avatar">AS</div><div><strong>Alex Smith</strong><small>alex@example.com</small></div><Icon name="chevron" /></div>
+          <div className="profile"><div className="profile-avatar">SK</div><div><strong>Sriram Kolli</strong><small>kollisriram6@gmail.com</small></div><Icon name="chevron" /></div>
         </div>
       </aside>
 
@@ -136,7 +177,7 @@ export default function Dashboard() {
           <div className="topbar-actions">
             <label className="search-box"><Icon name="search" /><input aria-label="Search opportunities" placeholder="Search opportunities..." /></label>
             <button className="icon-button" aria-label="Notifications"><Icon name="bell" /><span className="notification-dot" /></button>
-            <div className="top-avatar">AS</div>
+            <div className="top-avatar">SK</div>
           </div>
         </header>
 
@@ -144,7 +185,7 @@ export default function Dashboard() {
           <div>
             <p className="eyebrow">Monday, September 12, 2026</p>
             <h1>Your search, in motion<span className="heading-dot">.</span></h1>
-            <p className="welcome-copy">Keep your best opportunities, applications, and next steps in one place.</p>
+            <p className="welcome-copy">Live remote software engineering opportunities aggregated and automated.</p>
           </div>
           <button className="primary-button" onClick={() => document.getElementById("opportunities")?.scrollIntoView({ behavior: "smooth" })}><Icon name="spark" />View Tracker</button>
         </section>
@@ -157,8 +198,17 @@ export default function Dashboard() {
 
         <section className="content-grid">
           <div className="opportunities-panel" id="opportunities">
-            <div className="section-heading">
-              <div><h2>Job Tracker</h2><p>Track your applications through the pipeline.</p></div>
+            <div className="section-heading" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div><h2>Job Tracker</h2><p>Live remote roles from Himalayas &amp; Arbeitnow.</p></div>
+              <button 
+                className="apply-button" 
+                style={{ padding: "0.4rem 0.9rem", fontSize: "13px", height: "auto" }}
+                onClick={fetchLiveJobs} 
+                disabled={isRefreshing}
+              >
+                <Icon name="spark" />
+                {isRefreshing ? "Scanning..." : "Scan Live Jobs"}
+              </button>
             </div>
             
             <h3 style={{ fontSize: "14px", fontWeight: 600, color: "#666", marginTop: "1rem", marginBottom: "0.5rem" }}>Discovered</h3>
@@ -176,8 +226,8 @@ export default function Dashboard() {
             </div>
             <div className="timeline">
               <div className="timeline-item"><span className="timeline-icon success"><Icon name="spark" /></span><div><strong>Application launched</strong><p>Senior Software Engineer at Figma</p><time>Today, 9:42 AM</time></div></div>
-              <div className="timeline-item"><span className="timeline-icon blue"><Icon name="briefcase" /></span><div><strong>New match found</strong><p>Full Stack Developer at Linear</p><time>Today, 8:15 AM</time></div></div>
-              <div className="timeline-item"><span className="timeline-icon pink"><Icon name="clock" /></span><div><strong>Profile updated</strong><p>Your preferences are now active</p><time>Yesterday, 4:30 PM</time></div></div>
+              <div className="timeline-item"><span className="timeline-icon blue"><Icon name="briefcase" /></span><div><strong>New match found</strong><p>Cloudflare Full Stack Developer</p><time>Today, 8:15 AM</time></div></div>
+              <div className="timeline-item"><span className="timeline-icon pink"><Icon name="clock" /></span><div><strong>Profile active</strong><p>Azure OpenAI Luna answers ready</p><time>Yesterday, 4:30 PM</time></div></div>
             </div>
             <button className="activity-link">See all activity <Icon name="arrow" /></button>
           </aside>
@@ -188,4 +238,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
