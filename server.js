@@ -18,39 +18,7 @@ app.use((req, res, next) => {
 app.get('/', (req, res) => res.json({ status: 'ok', service: 'Scout Job Automation API' }));
 app.get('/health', (req, res) => res.json({ status: 'healthy' }));
 
-const { fetchArbeitnow } = require('./src/discovery/arbeitnow');
-const { fetchHimalayas } = require('./src/discovery/himalayas');
 
-// Discovery endpoint: fetch real live jobs from job aggregators
-app.get('/jobs', async (req, res) => {
-  try {
-    const [arbeitnowJobs, himalayasJobs] = await Promise.all([
-      fetchArbeitnow().catch(err => { console.warn('Arbeitnow error:', err.message); return []; }),
-      fetchHimalayas().catch(err => { console.warn('Himalayas error:', err.message); return []; })
-    ]);
-
-    const combined = [...arbeitnowJobs, ...himalayasJobs]
-      .filter(j => j && j.url)
-      .map((job, idx) => ({
-        id: idx + 1,
-        title: job.title,
-        company: job.company || 'Tech Company',
-        location: job.location || 'Remote',
-        salary: job.salary || 'Competitive',
-        source: job.source,
-        postedAt: job.postedAt || 'Recent',
-        url: job.url,
-        tags: ['Remote', 'Software', job.source],
-        color: idx % 3 === 0 ? 'violet' : idx % 3 === 1 ? 'blue' : 'pink',
-        status: 'Discovered'
-      }));
-
-    res.json({ jobs: combined });
-  } catch (err) {
-    console.error('Error in /jobs endpoint:', err.message);
-    res.status(500).json({ error: 'Failed to fetch live jobs' });
-  }
-});
 
 // Helper function to call Azure OpenAI for custom questions
 async function answerCustomQuestions(questions, profile, jobDescription) {
@@ -332,4 +300,3 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`Scout apply-service listening on ${PORT}`));
-

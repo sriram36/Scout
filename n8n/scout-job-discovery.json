@@ -1,0 +1,186 @@
+﻿{
+    "settings":  {
+                     "executionOrder":  "v1"
+                 },
+    "name":  "Scout - Automated Job Discovery",
+    "connections":  {
+                        "Normalize \u0026 Deduplicate":  {
+                                                             "main":  [
+                                                                          {
+                                                                              "node":  "Save to Supabase",
+                                                                              "type":  "main",
+                                                                              "index":  0
+                                                                          }
+                                                                      ]
+                                                         },
+                        "Fetch Himalayas Jobs":  {
+                                                     "main":  [
+                                                                  {
+                                                                      "node":  "Normalize \u0026 Deduplicate",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                 },
+                        "Schedule Trigger":  {
+                                                 "main":  [
+                                                              {
+                                                                  "node":  "Fetch Himalayas Jobs",
+                                                                  "type":  "main",
+                                                                  "index":  0
+                                                              },
+                                                              {
+                                                                  "node":  "Fetch Arbeitnow Jobs",
+                                                                  "type":  "main",
+                                                                  "index":  0
+                                                              }
+                                                          ]
+                                             },
+                        "Fetch Arbeitnow Jobs":  {
+                                                     "main":  [
+                                                                  {
+                                                                      "node":  "Normalize \u0026 Deduplicate",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                 },
+                        "When clicking \u0027Test workflow\u0027":  {
+                                                                        "main":  [
+                                                                                     {
+                                                                                         "node":  "Fetch Himalayas Jobs",
+                                                                                         "type":  "main",
+                                                                                         "index":  0
+                                                                                     },
+                                                                                     {
+                                                                                         "node":  "Fetch Arbeitnow Jobs",
+                                                                                         "type":  "main",
+                                                                                         "index":  0
+                                                                                     }
+                                                                                 ]
+                                                                    }
+                    },
+    "nodes":  [
+                  {
+                      "id":  "schedule-trigger-1",
+                      "name":  "Schedule Trigger",
+                      "parameters":  {
+                                         "rule":  {
+                                                      "interval":  [
+                                                                       {
+                                                                           "hoursInterval":  6,
+                                                                           "field":  "hours"
+                                                                       }
+                                                                   ]
+                                                  }
+                                     },
+                      "type":  "n8n-nodes-base.scheduleTrigger",
+                      "position":  [
+                                       180,
+                                       240
+                                   ],
+                      "typeVersion":  1.2
+                  },
+                  {
+                      "id":  "manual-trigger-1",
+                      "name":  "When clicking \u0027Test workflow\u0027",
+                      "parameters":  {
+
+                                     },
+                      "type":  "n8n-nodes-base.manualTrigger",
+                      "position":  [
+                                       180,
+                                       420
+                                   ],
+                      "typeVersion":  1
+                  },
+                  {
+                      "id":  "http-himalayas",
+                      "name":  "Fetch Himalayas Jobs",
+                      "parameters":  {
+                                         "method":  "GET",
+                                         "url":  "https://himalayas.app/jobs/api?category=developer",
+                                         "options":  {
+                                                         "timeout":  10000
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "position":  [
+                                       440,
+                                       240
+                                   ],
+                      "typeVersion":  4.2
+                  },
+                  {
+                      "id":  "http-arbeitnow",
+                      "name":  "Fetch Arbeitnow Jobs",
+                      "parameters":  {
+                                         "method":  "GET",
+                                         "url":  "https://www.arbeitnow.com/api/job-board-api",
+                                         "options":  {
+                                                         "timeout":  10000
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "position":  [
+                                       440,
+                                       420
+                                   ],
+                      "typeVersion":  4.2
+                  },
+                  {
+                      "id":  "code-normalize",
+                      "name":  "Normalize \u0026 Deduplicate",
+                      "parameters":  {
+                                         "jsCode":  "const himalayasData = Fetch Himalayas Jobs.first()?.json?.jobs || [];\nconst arbeitnowData = Fetch Arbeitnow Jobs.first()?.json?.data || [];\n\nconst keywords = [\u0027engineer\u0027, \u0027developer\u0027, \u0027software\u0027, \u0027full stack\u0027, \u0027backend\u0027, \u0027frontend\u0027];\nconst results = [];\nconst seenUrls = new Set();\n\n// 1. Process Himalayas\nfor (const job of himalayasData) {\n  const title = (job.title || \u0027\u0027).toLowerCase();\n  if (!keywords.some(kw =\u003e title.includes(kw))) continue;\n\n  const url = job.applicationLink || job.guid;\n  if (!url || seenUrls.has(url)) continue;\n  seenUrls.add(url);\n\n  results.push({\n    json: {\n      title: job.title,\n      company: job.companyName || \u0027Tech Partner\u0027,\n      location: (job.locationRestrictions \u0026\u0026 job.locationRestrictions.length \u003e 0) ? job.locationRestrictions.join(\u0027, \u0027) : \u0027Remote\u0027,\n      salary: job.minSalary \u0026\u0026 job.maxSalary ? $ - {job.maxSalary.toLocaleString()} : \u0027Competitive\u0027,\n      source: \u0027Himalayas\u0027,\n      url: url,\n      description: (job.excerpt || \u0027\u0027).substring(0, 400),\n      posted_at: job.pubDate ? new Date(job.pubDate * 1000).toISOString() : new Date().toISOString(),\n      status: \u0027Discovered\u0027\n    }\n  });\n}\n\n// 2. Process Arbeitnow\nfor (const job of arbeitnowData) {\n  if (job.remote !== true) continue;\n  const title = (job.title || \u0027\u0027).toLowerCase();\n  if (!keywords.some(kw =\u003e title.includes(kw))) continue;\n\n  const url = job.url;\n  if (!url || seenUrls.has(url)) continue;\n  seenUrls.add(url);\n\n  results.push({\n    json: {\n      title: job.title,\n      company: job.company_name,\n      location: job.location || \u0027Remote\u0027,\n      salary: \u0027Competitive\u0027,\n      source: \u0027Arbeitnow\u0027,\n      url: url,\n      description: (job.description || \u0027\u0027).replace(/\u003c[^\u003e]*\u003e?/gm, \u0027\u0027).substring(0, 400),\n      posted_at: job.created_at ? new Date(job.created_at * 1000).toISOString() : new Date().toISOString(),\n      status: \u0027Discovered\u0027\n    }\n  });\n}\n\nreturn results;"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "position":  [
+                                       700,
+                                       320
+                                   ],
+                      "typeVersion":  2
+                  },
+                  {
+                      "id":  "supabase-upsert",
+                      "name":  "Save to Supabase",
+                      "parameters":  {
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "value":  "={{ $env.SUPABASE_ANON_KEY }}",
+                                                                                         "name":  "apikey"
+                                                                                     },
+                                                                                     {
+                                                                                         "value":  "Bearer ={{ $env.SUPABASE_ANON_KEY }}",
+                                                                                         "name":  "Authorization"
+                                                                                     },
+                                                                                     {
+                                                                                         "value":  "application/json",
+                                                                                         "name":  "Content-Type"
+                                                                                     },
+                                                                                     {
+                                                                                         "value":  "resolution=ignore-duplicates",
+                                                                                         "name":  "Prefer"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "method":  "POST",
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={{ JSON.stringify() }}",
+                                         "url":  "={{ $env.SUPABASE_URL }}/rest/v1/jobs",
+                                         "sendHeaders":  true,
+                                         "options":  {
+
+                                                     },
+                                         "sendBody":  true
+                                     },
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "position":  [
+                                       960,
+                                       320
+                                   ],
+                      "typeVersion":  4.2
+                  }
+              ]
+}
