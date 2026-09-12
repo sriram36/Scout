@@ -94,7 +94,7 @@ export default function Dashboard() {
             <div className="job-action">
               <span className="source">{job.status}</span>
               {job.status === "Discovered" ? (
-                <button className="apply-button" onClick={() => handleApply(job.id, job.url)} disabled={loadingId === id}>
+                <button className="apply-button" onClick={() => handleApply(job.id, job.url)} disabled={loadingId === job.id}>
                   {loadingId === job.id ? "Launching..." : statusMsg?.id === job.id ? statusMsg.msg : "Auto-fill"}
                   <Icon name="arrow" />
                 </button>
