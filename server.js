@@ -41,7 +41,7 @@ Respond ONLY with a JSON object where the keys are the Question IDs and the valu
         'api-key': process.env.AZURE_OPENAI_KEY
       },
       body: JSON.stringify({
-        messages: [{ role: 'user', content: prompt }]
+        messages: [{ role: 'user', content: prompt }], max_completion_tokens: 2000
       })
     });
     
