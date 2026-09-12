@@ -1,0 +1,8 @@
+{
+  "first_name": "Jane",
+  "last_name": "Doe",
+  "email": "jane.doe@example.com",
+  "phone": "+1 555-0199",
+  "location": "San Francisco, CA",
+  "resume_path": "./resume.pdf"
+}

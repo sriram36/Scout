@@ -1,0 +1,7 @@
+node_modules
+dashboard
+.git
+.next
+.env
+profile.json
+*.log

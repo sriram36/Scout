@@ -8,25 +8,31 @@ const INITIAL_JOBS = [
   { id: 3, title: "Backend Engineer, Data", company: "Vercel", location: "Remote", salary: "$175k - $230k", source: "Adzuna", postedAt: "Yesterday", url: "https://vercel.com/careers/backend", tags: ["Rust", "Node.js", "AWS"], color: "pink", status: "Discovered" },
 ];
 
-function Icon({ name }: { name: "grid" | "briefcase" | "spark" | "clock" | "settings" | "search" | "bell" | "arrow" | "pin" | "salary" | "chevron" }) {
-  const paths = {
-    grid: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>,
-    briefcase: <><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18M10 12v2h4v-2" /></>,
-    spark: <><path d="m12 3-1.4 5.6L5 10l5.6 1.4L12 17l1.4-5.6L19 10l-5.6-1.4L12 3Z" /><path d="m19 16-.6 2.4L16 19l2.4.6L19 22l.6-2.4L22 19l-2.4-.6L19 16Z" /></>,
-    clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
-    settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.8 1.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-2.5V20a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1-1.8-1.8.1-.1A1.7 1.7 0 0 0 8 15a1.7 1.7 0 0 0-1.6-1H6v-2.5h.4A1.7 1.7 0 0 0 8 10a1.7 1.7 0 0 0-.3-1.9l-.1-.1 1.8-1.8.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6v-.2h2.5V5a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1 1.8 1.8-.1.1A1.7 1.7 0 0 0 19 10c.2.6.8 1 1.4 1h.4v2.5h-.4a1.7 1.7 0 0 0-1.6 1.5Z" /></>,
-    search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></>,
-    bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></>,
-    arrow: <><path d="M5 12h14M13 6l6 6-6 6" /></>,
-    pin: <><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z" /><circle cx="12" cy="10" r="2.5" /></>,
-    salary: <><circle cx="12" cy="12" r="9" /><path d="M15 9.5c-.5-.8-1.5-1.2-2.7-1.2-1.4 0-2.3.7-2.3 1.7 0 2.7 5 1 5 3.7 0 1-.9 1.8-2.4 1.8-1.2 0-2.2-.4-2.8-1.3M12 6.8v10.4" /></>,
-    chevron: <path d="m9 18 6-6-6-6" />,
-  };
-  return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
+function Icon({ name }: { name: string }) {
+  if (name === "spark") return <svg viewBox="0 0 24 24" className="icon"><path d="m12 3 1.9 4.8L18.7 9.7 13.9 12l-1.9 4.8L10.1 12 5.3 9.7l4.8-1.9L12 3Z" /></svg>;
+  if (name === "briefcase") return <svg viewBox="0 0 24 24" className="icon"><path d="M9 6V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1h4a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4Zm2-1v1h2V5h-2Zm-6 5v8h14v-8H5Z" /></svg>;
+  if (name === "clock") return <svg viewBox="0 0 24 24" className="icon"><path d="M12 4a8 8 0 1 0 8 8 8.01 8.01 0 0 0-8-8Zm0 2a6 6 0 1 1-6 6 6 6 0 0 1 6-6Zm-.5 2.5v4.25l3.25 1.9.75-1.23-2.5-1.47V8.5h-1.5Z" /></svg>;
+  if (name === "pin") return <svg viewBox="0 0 24 24" className="icon"><path d="M12 3a6 6 0 0 0-6 6c0 4.2 6 12 6 12s6-7.8 6-12a6 6 0 0 0-6-6Zm0 8.2a2.2 2.2 0 1 1 2.2-2.2A2.2 2.2 0 0 1 12 11.2Z" /></svg>;
+  if (name === "salary") return <svg viewBox="0 0 24 24" className="icon"><path d="M12 4a8 8 0 1 0 8 8 8 8 0 0 0-8-8Zm1 11.9V17h-2v-1.1a4 4 0 0 1-2-1.3l1.4-1.4a2.3 2.3 0 0 0 1.6.8c.8 0 1.2-.4 1.2-.8s-.3-.7-1.4-1c-1.8-.4-2.8-1.2-2.8-2.6 0-1.2.9-2.2 2-2.5V6h2v1.1a3.8 3.8 0 0 1 1.7 1l-1.3 1.4a2 2 0 0 0-1.4-.6c-.7 0-1.1.3-1.1.7s.3.6 1.3.9c1.9.5 2.9 1.3 2.9 2.7 0 1.2-.8 2.3-2.1 2.6Z" /></svg>;
+  if (name === "arrow") return <svg viewBox="0 0 24 24" className="icon"><path d="M13.5 6 12 7.4 15.6 11H5v2h10.6L12 16.6 13.5 18l6-6-6-6Z" /></svg>;
+  if (name === "settings") return <svg viewBox="0 0 24 24" className="icon"><path d="m19.4 13 .1-1-.1-1 2.1-1.6-2-3.5-2.5.8a7.8 7.8 0 0 0-1.7-1L15 4h-4l-.3 1.7a7.8 7.8 0 0 0-1.7 1L6.5 5.9l-2 3.5L6.6 11l-.1 1 .1 1-2.1 1.6 2 3.5 2.5-.8a7.8 7.8 0 0 0 1.7 1L11 20h4l.3-1.7a7.8 7.8 0 0 0 1.7-1l2.5.8 2-3.5-2.1-1.6ZM13 14.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5Z" /></svg>;
+  if (name === "search") return <svg viewBox="0 0 24 24" className="icon"><path d="m19.6 18.2-4.3-4.3a6.5 6.5 0 1 0-1.4 1.4l4.3 4.3 1.4-1.4ZM5.5 10a4.5 4.5 0 1 1 4.5 4.5A4.5 4.5 0 0 1 5.5 10Z" /></svg>;
+  if (name === "bell") return <svg viewBox="0 0 24 24" className="icon"><path d="M12 4a5 5 0 0 0-5 5v3.4L5.6 14A1 1 0 0 0 6.3 16h11.4a1 1 0 0 0 .7-1.6L17 12.4V9a5 5 0 0 0-5-5Zm-2 13h4a2 2 0 0 1-4 0Z" /></svg>;
+  if (name === "grid") return <svg viewBox="0 0 24 24" className="icon"><path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z" /></svg>;
+  return <svg viewBox="0 0 24 24" className="icon"><path d="m8.5 10 3.5 3.5 3.5-3.5 1.5 1.5-5 5-5-5 1.5-1.5Z" /></svg>;
 }
 
-function StatCard({ label, value, change, icon, accent }: { label: string; value: string; change: string; icon: "briefcase" | "spark" | "clock"; accent: string }) {
-  return <div className="stat-card"><div className="stat-top"><span className={`stat-icon ${accent}`}><Icon name={icon} /></span><span className="stat-change">{change}</span></div><p>{label}</p><strong>{value}</strong></div>;
+function StatCard({ label, value, change, icon, accent }: { label: string; value: string; change: string; icon: string; accent: string }) {
+  return (
+    <div className={`stat-card stat-${accent}`}>
+      <div className="stat-top">
+        <span className="stat-label">{label}</span>
+        <span className="stat-icon"><Icon name={icon} /></span>
+      </div>
+      <div className="stat-value">{value}</div>
+      <div className="stat-footer"><span className="stat-change">{change}</span></div>
+    </div>
+  );
 }
 
 export default function Dashboard() {
@@ -34,14 +40,20 @@ export default function Dashboard() {
   const [loadingId, setLoadingId] = useState<number | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ id: number; msg: string } | null>(null);
 
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
   const handleApply = async (id: number, url: string) => {
     setLoadingId(id); setStatusMsg(null);
     try {
-      const res = await fetch(`http://localhost:3001/apply?url=${encodeURIComponent(url)}`);
+      const res = await fetch(`${API_BASE}/apply?url=${encodeURIComponent(url)}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to trigger automation");
       
-      setStatusMsg({ id, msg: "Browser opened" });
+      const successText = data.status === "AWAITING_HUMAN_REVIEW"
+        ? (data.screenshot ? "Drafted in Cloud" : "Browser Opened")
+        : "Applied";
+
+      setStatusMsg({ id, msg: successText });
       
       // Update job tracker status
       setJobs(prev => prev.map(job => job.id === id ? { ...job, status: "Applied" } : job));
@@ -82,7 +94,7 @@ export default function Dashboard() {
             <div className="job-action">
               <span className="source">{job.status}</span>
               {job.status === "Discovered" ? (
-                <button className="apply-button" onClick={() => handleApply(job.id, job.url)} disabled={loadingId === job.id}>
+                <button className="apply-button" onClick={() => handleApply(job.id, job.url)} disabled={loadingId === id}>
                   {loadingId === job.id ? "Launching..." : statusMsg?.id === job.id ? statusMsg.msg : "Auto-fill"}
                   <Icon name="arrow" />
                 </button>
