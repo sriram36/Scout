@@ -389,5 +389,61 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: err.message || 'Internal Server Error' });
 });
 
+
+// SUPABASE POLLING LOGIC
+const { createClient } = require('@supabase/supabase-js');
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL; 
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+if (supabaseUrl && supabaseKey) {
+  const supabase = createClient(supabaseUrl, supabaseKey);
+  console.log('Supabase polling enabled. Checking for pending applications every 5 seconds...');
+  
+  setInterval(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('applications')
+        .select('*, listings!inner(*)')
+        .eq('status', 'pending_application')
+        .limit(1);
+
+      if (error) return;
+
+      if (data && data.length > 0) {
+        const app = data[0];
+        const job = app.listings;
+        console.log(`\n[Queue] Picked up pending job ${job.id}: ${job.title}`);
+        
+        // Prevent double processing
+        await supabase.from('applications').update({ status: 'applying' }).eq('id', app.id);
+
+        const url = job.apply_url || job.canonical_url;
+        const isLever = url && url.includes('jobs.lever.co');
+        
+        try {
+          if (isLever) {
+             await fetch(`http://localhost:${PORT}/apply-lever`, {
+               method: 'POST',
+               headers: { 'Content-Type': 'application/json' },
+               body: JSON.stringify({ url })
+             });
+          } else {
+             await fetch(`http://localhost:${PORT}/apply?url=${encodeURIComponent(url)}`);
+          }
+          
+          await supabase.from('applications').update({ status: 'Applied', status_updated_at: new Date().toISOString() }).eq('id', app.id);
+          console.log(`[Queue] Job ${job.id} marked as Applied!`);
+        } catch(err) {
+          console.error(`[Queue] Failed to process job ${job.id}:`, err.message);
+          await supabase.from('applications').update({ status: 'Failed', status_updated_at: new Date().toISOString() }).eq('id', app.id);
+        }
+      }
+    } catch (e) {
+      // ignore network blips
+    }
+  }, 5000);
+}
+
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`Scout apply-service listening on ${PORT}`));

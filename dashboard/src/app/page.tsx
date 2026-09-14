@@ -8,7 +8,7 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 interface Job {
-  id: number;
+  id: string; // uuid
   title: string;
   company: string;
   location: string;
@@ -19,7 +19,7 @@ interface Job {
   tags: string[];
   color: string;
   status: string;
-  match_reason?: string;
+  application_id?: string;
 }
 
 const PAGE_SIZE = 20;
@@ -53,8 +53,8 @@ function StatCard({ label, value, change, icon, accent }: { label: string; value
 
 export default function Dashboard() {
   const [jobs, setJobs] = useState<Job[]>([]);
-  const [loadingId, setLoadingId] = useState<number | null>(null);
-  const [statusMsg, setStatusMsg] = useState<{ id: number; msg: string } | null>(null);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [statusMsg, setStatusMsg] = useState<{ id: string; msg: string } | null>(null);
   
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
@@ -70,28 +70,34 @@ export default function Dashboard() {
       const to = from + PAGE_SIZE - 1;
       
       const { data, error } = await supabase
-        .from('jobs')
-        .select('*')
-        .order('match_score', { ascending: false, nullsFirst: false })
+        .from('listings')
+        .select(`
+          *,
+          applications ( id, status )
+        `)
+        .order('discovered_at', { ascending: false })
         .range(from, to);
 
       if (error) throw error;
       
       if (data) {
-        const formattedJobs = data.map(job => ({
-          id: job.id,
-          title: job.title || "Unknown Role",
-          company: job.company || "Unknown Company",
-          location: job.location || "Remote",
-          salary: job.salary_min ? '$' + (job.salary_min / 1000).toFixed(0) + 'k+' : "Undisclosed",
-          source: job.source,
-          postedAt: job.posted_date ? new Date(job.posted_date).toLocaleDateString() : "Recent",
-          url: job.apply_url || job.canonical_url,
-          tags: job.match_score ? [`Score: ${job.match_score}/10`] : [],
-          color: job.match_score && job.match_score >= 8 ? "violet" : "blue",
-          status: job.status || "Discovered",
-          match_reason: job.match_reason
-        }));
+        const formattedJobs = data.map((job: any) => {
+          const app = job.applications && job.applications.length > 0 ? job.applications[0] : null;
+          return {
+            id: job.id,
+            title: job.title || "Unknown Role",
+            company: job.company || "Unknown Company",
+            location: job.location || "Remote",
+            salary: "Undisclosed", // Not available in listings schema
+            source: job.source,
+            postedAt: job.posted_date ? new Date(job.posted_date).toLocaleDateString() : "Recent",
+            url: job.apply_url || job.canonical_url,
+            tags: job.is_internship ? ["Internship"] : [],
+            color: "blue", // default color
+            status: app?.status || "Discovered",
+            application_id: app?.id
+          };
+        });
 
         if (reset) {
           setJobs(formattedJobs);
@@ -113,15 +119,24 @@ export default function Dashboard() {
     fetchLiveJobs(true);
   }, []);
 
-  const handleApply = async (id: number) => {
+  const handleApply = async (id: string) => {
     setLoadingId(id); setStatusMsg(null);
     try {
-      const { error } = await supabase
-        .from('jobs')
-        .update({ status: 'pending_application' })
-        .eq('id', id);
-
-      if (error) throw error;
+      // Check if application exists first
+      const job = jobs.find(j => j.id === id);
+      
+      if (job?.application_id) {
+        const { error } = await supabase
+          .from('applications')
+          .update({ status: 'pending_application', status_updated_at: new Date().toISOString() })
+          .eq('id', job.application_id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('applications')
+          .insert({ listing_id: id, status: 'pending_application', status_updated_at: new Date().toISOString() });
+        if (error) throw error;
+      }
       
       setStatusMsg({ id, msg: "Automation Triggered!" });
       setJobs(prev => prev.map(job => job.id === id ? { ...job, status: "pending_application" } : job));
@@ -158,7 +173,6 @@ export default function Dashboard() {
               <div className="tag-list">
                 {job.tags.map(tag => <span key={tag}>{tag}</span>)}
               </div>
-              {job.match_reason && <p style={{ fontSize: "12px", color: "#666", marginTop: "8px" }}><em>{job.match_reason}</em></p>}
             </div>
             <div className="job-action">
               <span className="source">{job.status === 'pending_application' ? 'Applying...' : job.status}</span>
@@ -257,19 +271,6 @@ export default function Dashboard() {
               </div>
             )}
           </div>
-
-          <aside className="activity-panel" id="activity">
-            <div className="section-heading">
-              <div><h2>Next steps</h2><p>Stay on top of your search momentum.</p></div>
-              <button className="more-button" aria-label="More activity">...</button>
-            </div>
-            <div className="timeline">
-              <div className="timeline-item"><span className="timeline-icon success"><Icon name="spark" /></span><div><strong>Application launched</strong><p>Senior Software Engineer at Figma</p><time>Today, 9:42 AM</time></div></div>
-              <div className="timeline-item"><span className="timeline-icon blue"><Icon name="briefcase" /></span><div><strong>New match found</strong><p>Cloudflare Full Stack Developer</p><time>Today, 8:15 AM</time></div></div>
-              <div className="timeline-item"><span className="timeline-icon pink"><Icon name="clock" /></span><div><strong>Profile active</strong><p>Azure OpenAI Luna answers ready</p><time>Yesterday, 4:30 PM</time></div></div>
-            </div>
-            <button className="activity-link">See all activity <Icon name="arrow" /></button>
-          </aside>
         </section>
         
         <footer className="footer"><span>Scout Automations</span><span>Built for a calmer job search.</span></footer>
