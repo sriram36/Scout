@@ -1,6 +1,11 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 interface Job {
   id: number;
@@ -14,13 +19,10 @@ interface Job {
   tags: string[];
   color: string;
   status: string;
+  match_reason?: string;
 }
 
-const INITIAL_JOBS: Job[] = [
-  { id: 1, title: "Senior Software Engineer, Platform", company: "Figma", location: "San Francisco, CA", salary: "$180k - $240k", source: "Himalayas", postedAt: "2h ago", url: "https://boards.greenhouse.io/figma/jobs/5426468004", tags: ["Node.js", "React", "WebGL"], color: "violet", status: "Discovered" },
-  { id: 2, title: "Full Stack Developer", company: "Cloudflare", location: "Remote", salary: "$160k - $210k", source: "Arbeitnow", postedAt: "5h ago", url: "https://boards.greenhouse.io/cloudflare/jobs/5643445", tags: ["TypeScript", "GraphQL", "PostgreSQL"], color: "blue", status: "Discovered" },
-  { id: 3, title: "Backend Engineer, Data", company: "Automattic", location: "Remote", salary: "$175k - $230k", source: "Adzuna", postedAt: "Yesterday", url: "https://boards.greenhouse.io/automattic/jobs/1410972", tags: ["Rust", "Node.js", "AWS"], color: "pink", status: "Discovered" },
-];
+const PAGE_SIZE = 20;
 
 function Icon({ name }: { name: string }) {
   if (name === "spark") return <svg viewBox="0 0 24 24" className="icon"><path d="m12 3 1.9 4.8L18.7 9.7 13.9 12l-1.9 4.8L10.1 12 5.3 9.7l4.8-1.9L12 3Z" /></svg>;
@@ -50,55 +52,79 @@ function StatCard({ label, value, change, icon, accent }: { label: string; value
 }
 
 export default function Dashboard() {
-  const [jobs, setJobs] = useState<Job[]>(INITIAL_JOBS);
+  const [jobs, setJobs] = useState<Job[]>([]);
   const [loadingId, setLoadingId] = useState<number | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ id: number; msg: string } | null>(null);
+  
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const rawApiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
-  const API_BASE = rawApiBase.replace(/\/+$/, "");
-
-  const fetchLiveJobs = async () => {
+  const fetchLiveJobs = async (reset = false) => {
+    if (!hasMore && !reset) return;
     setIsRefreshing(true);
+    
     try {
-      const res = await fetch(`${API_BASE}/jobs`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.jobs && Array.isArray(data.jobs) && data.jobs.length > 0) {
-          setJobs(prev => {
-            const applied = prev.filter(j => j.status === "Applied");
-            const appliedUrls = new Set(applied.map(j => j.url));
-            const newDiscovered = data.jobs.filter((j: Job) => !appliedUrls.has(j.url));
-            return [...applied, ...newDiscovered];
-          });
+      const currentPage = reset ? 0 : page;
+      const from = currentPage * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+      
+      const { data, error } = await supabase
+        .from('jobs')
+        .select('*')
+        .order('match_score', { ascending: false, nullsFirst: false })
+        .range(from, to);
+
+      if (error) throw error;
+      
+      if (data) {
+        const formattedJobs = data.map(job => ({
+          id: job.id,
+          title: job.title || "Unknown Role",
+          company: job.company || "Unknown Company",
+          location: job.location || "Remote",
+          salary: job.salary_min ? '$' + (job.salary_min / 1000).toFixed(0) + 'k+' : "Undisclosed",
+          source: job.source,
+          postedAt: job.posted_date ? new Date(job.posted_date).toLocaleDateString() : "Recent",
+          url: job.apply_url || job.canonical_url,
+          tags: job.match_score ? [`Score: ${job.match_score}/10`] : [],
+          color: job.match_score && job.match_score >= 8 ? "violet" : "blue",
+          status: job.status || "Discovered",
+          match_reason: job.match_reason
+        }));
+
+        if (reset) {
+          setJobs(formattedJobs);
+          setPage(1);
+        } else {
+          setJobs(prev => [...prev, ...formattedJobs]);
+          setPage(p => p + 1);
         }
+        setHasMore(data.length === PAGE_SIZE);
       }
     } catch (err) {
-      console.warn("Could not fetch live discovery jobs, keeping current list:", err);
+      console.warn("Could not fetch jobs from Supabase:", err);
     } finally {
       setIsRefreshing(false);
     }
   };
 
   useEffect(() => {
-    fetchLiveJobs();
-  }, [API_BASE]);
+    fetchLiveJobs(true);
+  }, []);
 
-  const handleApply = async (id: number, url: string) => {
+  const handleApply = async (id: number) => {
     setLoadingId(id); setStatusMsg(null);
     try {
-      const res = await fetch(`${API_BASE}/apply?url=${encodeURIComponent(url)}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to trigger automation");
-      
-      const successText = data.status === "AWAITING_HUMAN_REVIEW"
-        ? (data.screenshot ? "Drafted in Cloud" : "Browser Opened")
-        : "Applied";
+      const { error } = await supabase
+        .from('jobs')
+        .update({ status: 'pending_application' })
+        .eq('id', id);
 
-      setStatusMsg({ id, msg: successText });
+      if (error) throw error;
       
-      // Update job tracker status
-      setJobs(prev => prev.map(job => job.id === id ? { ...job, status: "Applied" } : job));
+      setStatusMsg({ id, msg: "Automation Triggered!" });
+      setJobs(prev => prev.map(job => job.id === id ? { ...job, status: "pending_application" } : job));
       
     } catch (err) { 
       setStatusMsg({ id, msg: err instanceof Error ? err.message : "Something went wrong" }); 
@@ -110,7 +136,7 @@ export default function Dashboard() {
   };
 
   const renderJobList = (statusFilter: string) => {
-    const filteredJobs = jobs.filter(j => j.status === statusFilter);
+    const filteredJobs = jobs.filter(j => j.status === statusFilter || (statusFilter === "Applied" && j.status === "pending_application"));
     if (filteredJobs.length === 0) {
       return <p style={{ color: "#666", padding: "1rem" }}>No jobs in this stage.</p>;
     }
@@ -132,17 +158,18 @@ export default function Dashboard() {
               <div className="tag-list">
                 {job.tags.map(tag => <span key={tag}>{tag}</span>)}
               </div>
+              {job.match_reason && <p style={{ fontSize: "12px", color: "#666", marginTop: "8px" }}><em>{job.match_reason}</em></p>}
             </div>
             <div className="job-action">
-              <span className="source">{job.status}</span>
+              <span className="source">{job.status === 'pending_application' ? 'Applying...' : job.status}</span>
               {job.status === "Discovered" ? (
-                <button className="apply-button" onClick={() => handleApply(job.id, job.url)} disabled={loadingId === job.id}>
+                <button className="apply-button" onClick={() => handleApply(job.id)} disabled={loadingId === job.id}>
                   {loadingId === job.id ? "Launching..." : statusMsg?.id === job.id ? statusMsg.msg : "Auto-fill"}
                   <Icon name="arrow" />
                 </button>
               ) : (
                 <button className="apply-button" style={{ background: "#4caf50", color: "#fff" }}>
-                  Review App <Icon name="arrow" />
+                  {job.status === "pending_application" ? "Opening..." : "Review App"} <Icon name="arrow" />
                 </button>
               )}
             </div>
@@ -156,7 +183,7 @@ export default function Dashboard() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand"><span className="brand-mark"><Icon name="spark" /></span><span>scout<span className="brand-dot">.</span></span></div>
-        <div className="workspace"><div className="workspace-avatar">SK</div><div><small>WORKSPACE</small><strong>Sriram&apos;s search</strong></div><Icon name="chevron" /></div>
+        <div className="workspace"><div className="workspace-avatar">SK</div><div><small>WORKSPACE</small><strong>Sriram's search</strong></div><Icon name="chevron" /></div>
         <nav className="nav-list" aria-label="Main navigation">
           <p className="nav-label">Command center</p>
           <a className="nav-item active" href="#overview"><Icon name="grid" />Overview</a>
@@ -192,22 +219,22 @@ export default function Dashboard() {
 
         <section className="stats-grid" aria-label="Search statistics">
           <StatCard label="Jobs discovered" value={jobs.filter(j => j.status === 'Discovered').length.toString()} change="Ready to review" icon="briefcase" accent="violet" />
-          <StatCard label="Applications sent" value={jobs.filter(j => j.status === 'Applied').length.toString()} change="+1 today" icon="spark" accent="blue" />
+          <StatCard label="Applications sent" value={jobs.filter(j => j.status === 'Applied' || j.status === 'pending_application').length.toString()} change="Keep the momentum" icon="spark" accent="blue" />
           <StatCard label="Response rate" value="38%" change="+6.4%" icon="clock" accent="pink" />
         </section>
 
         <section className="content-grid">
           <div className="opportunities-panel" id="opportunities">
             <div className="section-heading" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div><h2>Job Tracker</h2><p>Live remote roles from Himalayas &amp; Arbeitnow.</p></div>
+              <div><h2>Job Tracker</h2><p>Live matching roles straight from your pipeline.</p></div>
               <button 
                 className="apply-button" 
                 style={{ padding: "0.4rem 0.9rem", fontSize: "13px", height: "auto" }}
-                onClick={fetchLiveJobs} 
+                onClick={() => fetchLiveJobs(true)} 
                 disabled={isRefreshing}
               >
                 <Icon name="spark" />
-                {isRefreshing ? "Scanning..." : "Scan Live Jobs"}
+                {isRefreshing ? "Scanning..." : "Refresh"}
               </button>
             </div>
             
@@ -217,6 +244,18 @@ export default function Dashboard() {
             <h3 style={{ fontSize: "14px", fontWeight: 600, color: "#666", marginTop: "2rem", marginBottom: "0.5rem" }}>Applied</h3>
             {renderJobList("Applied")}
             
+            {hasMore && (
+              <div style={{ display: 'flex', justifyContent: 'center', marginTop: '2rem' }}>
+                <button 
+                  className="apply-button" 
+                  style={{ background: '#fff', border: '1px solid #ddd', color: '#333' }}
+                  onClick={() => fetchLiveJobs()}
+                  disabled={isRefreshing}
+                >
+                  {isRefreshing ? "Loading..." : "Load More"}
+                </button>
+              </div>
+            )}
           </div>
 
           <aside className="activity-panel" id="activity">
@@ -238,4 +277,3 @@ export default function Dashboard() {
     </div>
   );
 }
-

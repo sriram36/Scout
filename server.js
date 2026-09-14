@@ -18,8 +18,6 @@ app.use((req, res, next) => {
 app.get('/', (req, res) => res.json({ status: 'ok', service: 'Scout Job Automation API' }));
 app.get('/health', (req, res) => res.json({ status: 'healthy' }));
 
-
-
 // Helper function to call Azure OpenAI for custom questions
 async function answerCustomQuestions(questions, profile, jobDescription) {
   if (!questions || questions.length === 0) return {};
@@ -172,7 +170,6 @@ app.all('/apply', async (req, res) => {
       }
     }
 
-    // Auto-detect headless mode: default to true on cloud/Linux, false on local desktop
     const isCloud = process.platform === 'linux' || !!(process.env.RENDER || process.env.RAILWAY_ENVIRONMENT || process.env.NODE_ENV === 'production');
     const isHeadless = process.env.HEADLESS ? process.env.HEADLESS === 'true' : isCloud;
 
@@ -197,10 +194,8 @@ app.all('/apply', async (req, res) => {
     console.log(`Navigating to ${url}...`);
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-    // Scrape visible text
     const jobDescription = await page.evaluate(() => document.body.innerText || '');
 
-    // Extract inputs
     const inputs = await page.$$eval('input, textarea, select', els =>
       els.map(el => {
         let label = null;
@@ -216,12 +211,10 @@ app.all('/apply', async (req, res) => {
       })
     );
 
-    // Separate standard fields, EEOC fields, and custom questions
     const standardFields = ['first_name', 'last_name', 'email', 'phone'];
     const eeocKeywords = ['gender', 'hispanic', 'veteran', 'disability'];
     const customQuestions = [];
 
-    // Fill standard fields
     for (const input of inputs) {
       if (!input.id) continue;
       
@@ -288,6 +281,104 @@ app.all('/apply', async (req, res) => {
     if (browser) {
       try { await browser.close(); } catch(e) {}
     }
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// LEVER APPLICATION LOGIC
+const LEVER_FIELDS = {
+  'name': 'full_name',
+  'email': 'email',
+  'phone': 'phone',
+  'urls[LinkedIn]': 'linkedin',
+  'urls[GitHub]': 'github',
+  'urls[Portfolio]': 'portfolio'
+};
+
+const LEVER_NEVER_TOUCH = [
+  'accountId', 'linkedInData', 'origin', 'referer', 'timezone', 
+  'socialReferralKey', 'socialSource', 'resumeStorageId', 'h-captcha-response', 'source'
+];
+
+app.post('/apply-lever', async (req, res) => {
+  let browser = null;
+  try {
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ error: 'Missing job URL' });
+
+    // Load profile from file, env, or fallback default
+    let profile = {};
+    const profilePath = path.join(__dirname, 'profile.json');
+    if (fs.existsSync(profilePath)) {
+      try {
+        profile = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
+      } catch (e) {
+        console.warn('Could not parse profile.json:', e.message);
+      }
+    } else if (process.env.PROFILE_JSON) {
+      try {
+        profile = JSON.parse(process.env.PROFILE_JSON);
+      } catch(e) {
+        console.warn('Could not parse PROFILE_JSON env var:', e.message);
+      }
+    }
+    
+    // Set up standard fallback fields
+    profile.first_name = profile.first_name || process.env.CANDIDATE_FIRST_NAME || "Sriram";
+    profile.last_name = profile.last_name || process.env.CANDIDATE_LAST_NAME || "Kolli";
+    profile.full_name = profile.full_name || (profile.first_name + ' ' + profile.last_name);
+    profile.email = profile.email || process.env.CANDIDATE_EMAIL || "kollisriram6@gmail.com";
+    profile.phone = profile.phone || process.env.CANDIDATE_PHONE || "+91 9581697955";
+
+    const isCloud = process.platform === 'linux' || !!(process.env.RENDER || process.env.RAILWAY_ENVIRONMENT || process.env.NODE_ENV === 'production');
+    const isHeadless = process.env.HEADLESS ? process.env.HEADLESS === 'true' : isCloud;
+
+    console.log(`Launching Playwright for Lever (headless: ${isHeadless})...`);
+    browser = await chromium.launch({
+      headless: isHeadless,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+    const page = await browser.newPage();
+    await page.goto(url, { waitUntil: 'networkidle' });
+
+    const filled = [];
+    const skipped = [];
+    const inputs = await page.$$('input, textarea, select');
+
+    for (const el of inputs) {
+      const name = await el.getAttribute('name');
+      const type = await el.getAttribute('type');
+
+      if (type === 'hidden' || LEVER_NEVER_TOUCH.includes(name)) {
+        skipped.push({ name, reason: 'Lever-internal or captcha — never touched' });
+        continue;
+      }
+      
+      if (type === 'file' && name === 'resume' && profile.resume_path && fs.existsSync(profile.resume_path)) {
+        await el.setInputFiles(profile.resume_path);
+        filled.push({ name, value: profile.resume_path });
+        continue;
+      }
+      
+      if (LEVER_FIELDS[name]) {
+        const val = profile[LEVER_FIELDS[name]] || (profile.links && profile.links[LEVER_FIELDS[name]]);
+        if (val) { 
+          await el.fill(val); 
+          filled.push({ name, value: val }); 
+          continue; 
+        }
+      }
+      
+      skipped.push({ name: name || '(no name)', reason: 'left for manual review' });
+    }
+
+    console.log('Filled:', filled); 
+    console.log('Skipped:', skipped);
+    res.json({ filled, skipped, note: 'Browser open — review, complete the rest, submit yourself.' });
+
+  } catch (error) {
+    console.error('Apply-lever error:', error);
+    if (browser) { try { await browser.close(); } catch(e) {} }
     res.status(500).json({ error: error.message });
   }
 });
