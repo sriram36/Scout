@@ -1,231 +1,230 @@
-﻿{
-    "settings":  {
-                     "executionOrder":  "v1"
-                 },
-    "name":  "Scout - Automated Job Discovery",
-    "connections":  {
-                        "Schedule Trigger":  {
-                                                 "main":  [
-                                                              {
-                                                                  "node":  "Fetch Himalayas Jobs",
-                                                                  "type":  "main",
-                                                                  "index":  0
-                                                              },
-                                                              {
-                                                                  "node":  "Fetch Arbeitnow Jobs",
-                                                                  "type":  "main",
-                                                                  "index":  0
-                                                              },
-                                                              {
-                                                                  "node":  "Fetch RemoteOK Jobs",
-                                                                  "type":  "main",
-                                                                  "index":  0
-                                                              }
-                                                          ]
-                                             },
-                        "Fetch RemoteOK Jobs":  {
-                                                    "main":  [
-                                                                 {
-                                                                     "node":  "Normalize \u0026 Deduplicate",
-                                                                     "type":  "main",
-                                                                     "index":  0
-                                                                 }
-                                                             ]
-                                                },
-                        "Normalize \u0026 Deduplicate":  {
-                                                             "main":  [
-                                                                          {
-                                                                              "node":  "Save to Supabase",
-                                                                              "type":  "main",
-                                                                              "index":  0
-                                                                          }
-                                                                      ]
-                                                         },
-                        "Fetch Arbeitnow Jobs":  {
-                                                     "main":  [
-                                                                  {
-                                                                      "node":  "Normalize \u0026 Deduplicate",
-                                                                      "type":  "main",
-                                                                      "index":  0
-                                                                  }
-                                                              ]
-                                                 },
-                        "Fetch Himalayas Jobs":  {
-                                                     "main":  [
-                                                                  {
-                                                                      "node":  "Normalize \u0026 Deduplicate",
-                                                                      "type":  "main",
-                                                                      "index":  0
-                                                                  }
-                                                              ]
-                                                 },
-                        "When clicking \u0027Test workflow\u0027":  {
-                                                                        "main":  [
-                                                                                     {
-                                                                                         "node":  "Fetch Himalayas Jobs",
-                                                                                         "type":  "main",
-                                                                                         "index":  0
-                                                                                     },
-                                                                                     {
-                                                                                         "node":  "Fetch Arbeitnow Jobs",
-                                                                                         "type":  "main",
-                                                                                         "index":  0
-                                                                                     },
-                                                                                     {
-                                                                                         "node":  "Fetch RemoteOK Jobs",
-                                                                                         "type":  "main",
-                                                                                         "index":  0
-                                                                                     }
-                                                                                 ]
-                                                                    }
-                    },
-    "nodes":  [
-                  {
-                      "id":  "schedule-trigger-1",
-                      "name":  "Schedule Trigger",
-                      "parameters":  {
-                                         "rule":  {
-                                                      "interval":  [
-                                                                       {
-                                                                           "hoursInterval":  6,
-                                                                           "field":  "hours"
-                                                                       }
-                                                                   ]
-                                                  }
-                                     },
-                      "type":  "n8n-nodes-base.scheduleTrigger",
-                      "position":  [
-                                       180,
-                                       240
-                                   ],
-                      "typeVersion":  1.2
-                  },
-                  {
-                      "id":  "manual-trigger-1",
-                      "name":  "When clicking \u0027Test workflow\u0027",
-                      "parameters":  {
-
-                                     },
-                      "type":  "n8n-nodes-base.manualTrigger",
-                      "position":  [
-                                       180,
-                                       420
-                                   ],
-                      "typeVersion":  1
-                  },
-                  {
-                      "id":  "http-himalayas",
-                      "name":  "Fetch Himalayas Jobs",
-                      "parameters":  {
-                                         "method":  "GET",
-                                         "url":  "https://himalayas.app/jobs/api?category=developer",
-                                         "options":  {
-                                                         "timeout":  10000
-                                                     }
-                                     },
-                      "type":  "n8n-nodes-base.httpRequest",
-                      "position":  [
-                                       440,
-                                       160
-                                   ],
-                      "typeVersion":  4.2
-                  },
-                  {
-                      "id":  "http-arbeitnow",
-                      "name":  "Fetch Arbeitnow Jobs",
-                      "parameters":  {
-                                         "method":  "GET",
-                                         "url":  "https://www.arbeitnow.com/api/job-board-api",
-                                         "options":  {
-                                                         "timeout":  10000
-                                                     }
-                                     },
-                      "type":  "n8n-nodes-base.httpRequest",
-                      "position":  [
-                                       440,
-                                       320
-                                   ],
-                      "typeVersion":  4.2
-                  },
-                  {
-                      "id":  "http-remoteok",
-                      "name":  "Fetch RemoteOK Jobs",
-                      "parameters":  {
-                                         "method":  "GET",
-                                         "url":  "https://remoteok.com/api",
-                                         "sendHeaders":  true,
-                                         "headerParameters":  {
-                                                                  "parameters":  [
-                                                                                     {
-                                                                                         "value":  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                                                                                         "name":  "User-Agent"
-                                                                                     }
-                                                                                 ]
-                                                              },
-                                         "options":  {
-                                                         "timeout":  10000
-                                                     }
-                                     },
-                      "type":  "n8n-nodes-base.httpRequest",
-                      "position":  [
-                                       440,
-                                       480
-                                   ],
-                      "typeVersion":  4.2
-                  },
-                  {
-                      "id":  "code-normalize",
-                      "name":  "Normalize \u0026 Deduplicate",
-                      "parameters":  {
-                                         "jsCode":  "const himalayasData = Fetch Himalayas Jobs.first()?.json?.jobs || [];\nconst arbeitnowData = Fetch Arbeitnow Jobs.first()?.json?.data || [];\nconst remoteokData = Fetch RemoteOK Jobs.first()?.json || [];\n\nconst keywords = [\u0027engineer\u0027, \u0027developer\u0027, \u0027software\u0027, \u0027full stack\u0027, \u0027backend\u0027, \u0027frontend\u0027, \u0027node\u0027, \u0027react\u0027, \u0027python\u0027, \u0027ai\u0027];\nconst results = [];\nconst seenUrls = new Set();\n\n// 1. Process Himalayas\nfor (const job of himalayasData) {\n  const title = (job.title || \u0027\u0027).toLowerCase();\n  if (!keywords.some(kw =\u003e title.includes(kw))) continue;\n\n  const url = job.applicationLink || job.guid;\n  if (!url || seenUrls.has(url)) continue;\n  seenUrls.add(url);\n\n  results.push({\n    json: {\n      title: job.title,\n      company: job.companyName || \u0027Tech Partner\u0027,\n      location: (job.locationRestrictions \u0026\u0026 job.locationRestrictions.length \u003e 0) ? job.locationRestrictions.join(\u0027, \u0027) : \u0027Remote\u0027,\n      salary: job.minSalary \u0026\u0026 job.maxSalary ? $ - {job.maxSalary.toLocaleString()} : \u0027Competitive\u0027,\n      source: \u0027Himalayas\u0027,\n      url: url,\n      description: (job.excerpt || \u0027\u0027).substring(0, 400),\n      posted_at: job.pubDate ? new Date(job.pubDate * 1000).toISOString() : new Date().toISOString(),\n      status: \u0027Discovered\u0027\n    }\n  });\n}\n\n// 2. Process Arbeitnow\nfor (const job of arbeitnowData) {\n  if (job.remote !== true) continue;\n  const title = (job.title || \u0027\u0027).toLowerCase();\n  if (!keywords.some(kw =\u003e title.includes(kw))) continue;\n\n  const url = job.url;\n  if (!url || seenUrls.has(url)) continue;\n  seenUrls.add(url);\n\n  results.push({\n    json: {\n      title: job.title,\n      company: job.company_name,\n      location: job.location || \u0027Remote\u0027,\n      salary: \u0027Competitive\u0027,\n      source: \u0027Arbeitnow\u0027,\n      url: url,\n      description: (job.description || \u0027\u0027).replace(/\u003c[^\u003e]*\u003e?/gm, \u0027\u0027).substring(0, 400),\n      posted_at: job.created_at ? new Date(job.created_at * 1000).toISOString() : new Date().toISOString(),\n      status: \u0027Discovered\u0027\n    }\n  });\n}\n\n// 3. Process RemoteOK (first item in array is API metadata, skip index 0)\nif (Array.isArray(remoteokData) \u0026\u0026 remoteokData.length \u003e 1) {\n  for (let i = 1; i \u003c remoteokData.length; i++) {\n    const job = remoteokData[i];\n    const title = (job.position || \u0027\u0027).toLowerCase();\n    if (!keywords.some(kw =\u003e title.includes(kw))) continue;\n\n    const url = job.url || (job.apply_url ? job.apply_url : null);\n    if (!url || seenUrls.has(url)) continue;\n    seenUrls.add(url);\n\n    results.push({\n      json: {\n        title: job.position,\n        company: job.company || \u0027RemoteOK Partner\u0027,\n        location: job.location || \u0027Remote\u0027,\n        salary: (job.salary_min \u0026\u0026 job.salary_max) ? $ - {job.salary_max.toLocaleString()} : \u0027Competitive\u0027,\n        source: \u0027RemoteOK\u0027,\n        url: url,\n        description: (job.description || \u0027\u0027).replace(/\u003c[^\u003e]*\u003e?/gm, \u0027\u0027).substring(0, 400),\n        posted_at: job.date ? new Date(job.date).toISOString() : new Date().toISOString(),\n        status: \u0027Discovered\u0027\n      }\n    });\n  }\n}\n\nreturn results;"
-                                     },
-                      "type":  "n8n-nodes-base.code",
-                      "position":  [
-                                       720,
-                                       320
-                                   ],
-                      "typeVersion":  2
-                  },
-                  {
-                      "id":  "supabase-upsert",
-                      "name":  "Save to Supabase",
-                      "parameters":  {
-                                         "headerParameters":  {
-                                                                  "parameters":  [
-                                                                                     {
-                                                                                         "value":  "={{ $env.SUPABASE_ANON_KEY }}",
-                                                                                         "name":  "apikey"
-                                                                                     },
-                                                                                     {
-                                                                                         "value":  "Bearer ={{ $env.SUPABASE_ANON_KEY }}",
-                                                                                         "name":  "Authorization"
-                                                                                     },
-                                                                                     {
-                                                                                         "value":  "application/json",
-                                                                                         "name":  "Content-Type"
-                                                                                     },
-                                                                                     {
-                                                                                         "value":  "resolution=ignore-duplicates",
-                                                                                         "name":  "Prefer"
-                                                                                     }
-                                                                                 ]
-                                                              },
-                                         "method":  "POST",
-                                         "specifyBody":  "json",
-                                         "jsonBody":  "={{ JSON.stringify() }}",
-                                         "url":  "={{ $env.SUPABASE_URL }}/rest/v1/jobs",
-                                         "sendHeaders":  true,
-                                         "options":  {
-
-                                                     },
-                                         "sendBody":  true
-                                     },
-                      "type":  "n8n-nodes-base.httpRequest",
-                      "position":  [
-                                       980,
-                                       320
-                                   ],
-                      "typeVersion":  4.2
-                  }
-              ]
+{
+  "id": "scout-job-discovery",
+  "name": "Scout Job Discovery",
+  "active": false,
+  "nodes": [
+    {
+      "id": "schedule",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "manual",
+      "name": "When clicking 'Test workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "http-himalayas",
+      "name": "Fetch Himalayas Jobs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        100
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "GET",
+        "url": "https://himalayas.app/jobs/api?category=developer",
+        "options": {
+          "timeout": 20000
+        }
+      }
+    },
+    {
+      "id": "http-arbeitnow",
+      "name": "Fetch Arbeitnow Jobs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        100
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.arbeitnow.com/api/job-board-api",
+        "options": {
+          "timeout": 20000
+        }
+      }
+    },
+    {
+      "id": "http-remoteok",
+      "name": "Fetch RemoteOK Jobs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        100
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "GET",
+        "url": "https://remoteok.com/api",
+        "options": {
+          "timeout": 20000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Scout/1.0 (personal job tracker)"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "normalize",
+      "name": "Normalize & Deduplicate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "'use strict';\n\n/**\n * Job normalization for the Scout n8n workflow.\n *\n * Pure functions, no imports: build-workflow.js embeds this file's source into the\n * n8n Code node, and tests run it directly.\n *\n * Input  — the raw arrays from the three sources:\n *   himalayas : response.jobs\n *   arbeitnow : response.data\n *   remoteok  : the whole response array (element 0 is API metadata)\n * Output — rows shaped for the `listings` table.\n */\n\nconst KEYWORDS = /\\b(?:engineer\\w*|developer\\w*|software|full[ -]?stack|back[ -]?end|front[ -]?end|node(?:\\.?js)?|react\\w*|python|ai|ml)\\b/i;\nconst INTERN = /\\bintern(?:ship)?s?\\b/i;\nconst TRACKING_PARAMS = ['ref', 'fbclid', 'gclid'];\nconst ENTITIES = { '&nbsp;': ' ', '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '\"', '&#39;': \"'\" };\n\n// Pure string parsing on purpose: the n8n Code sandbox is not guaranteed to expose\n// the URL global, and a thrown ReferenceError here would silently drop every job.\nconst URL_PATTERN = /^(https?):\\/\\/([^\\/?#\\s]+)([^?#\\s]*)(\\?[^#\\s]*)?(#\\S*)?$/i;\n\nfunction isTrackingParam(pair) {\n  const key = pair.split('=')[0].toLowerCase();\n  return /^utm_/.test(key) || TRACKING_PARAMS.includes(key);\n}\n\nfunction canonicalizeUrl(url) {\n  if (typeof url !== 'string') return null;\n  const match = URL_PATTERN.exec(url.trim());\n  if (!match) return null;\n\n  const scheme = match[1].toLowerCase();\n  const host = match[2].toLowerCase();\n  const pathname = match[3].replace(/\\/+$/, '');\n  const kept = (match[4] ? match[4].slice(1).split('&') : []).filter((pair) => pair && !isTrackingParam(pair));\n  return `${scheme}://${host}${pathname}${kept.length > 0 ? `?${kept.join('&')}` : ''}`;\n}\n\nfunction formatSalary(min, max) {\n  const ok = (n) => typeof n === 'number' && Number.isFinite(n) && n > 0;\n  if (!ok(min) || !ok(max)) return 'Competitive';\n  return `$${min.toLocaleString('en-US')} - $${max.toLocaleString('en-US')}`;\n}\n\nfunction cleanText(value, limit) {\n  if (typeof value !== 'string') return '';\n  const text = value\n    .replace(/<[^>]*>/g, ' ')\n    .replace(/&(?:nbsp|amp|lt|gt|quot|#39);/g, (m) => ENTITIES[m])\n    .replace(/\\s+/g, ' ')\n    .trim();\n  return limit ? text.substring(0, limit) : text;\n}\n\nfunction toIso(value, inSeconds) {\n  if (value === null || value === undefined || value === '') return null;\n  const date = typeof value === 'number' ? new Date(inSeconds ? value * 1000 : value) : new Date(value);\n  return Number.isNaN(date.getTime()) ? null : date.toISOString();\n}\n\nconst isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);\nconst str = (v) => (typeof v === 'string' ? v.trim() : '');\n\n// Each mapper returns { title, company, location, salary, description, url, postedDate } or null.\n\nfunction mapHimalayas(job) {\n  if (typeof job.title !== 'string' || !KEYWORDS.test(job.title)) return null;\n  const restrictions = Array.isArray(job.locationRestrictions) ? job.locationRestrictions.filter(Boolean) : [];\n  return {\n    title: job.title,\n    company: job.companyName,\n    location: restrictions.length > 0 ? restrictions.join(', ') : 'Remote',\n    salary: formatSalary(job.minSalary, job.maxSalary),\n    description: job.excerpt,\n    url: job.applicationLink || job.guid,\n    postedDate: toIso(job.pubDate, true),\n  };\n}\n\nfunction mapArbeitnow(job) {\n  if (job.remote !== true) return null;\n  if (typeof job.title !== 'string' || !KEYWORDS.test(job.title)) return null;\n  return {\n    title: job.title,\n    company: job.company_name,\n    location: str(job.location) || 'Remote',\n    salary: 'Competitive',\n    description: job.description,\n    url: job.url,\n    postedDate: toIso(job.created_at, true),\n  };\n}\n\nfunction mapRemoteOk(job) {\n  if (typeof job.position !== 'string' || !KEYWORDS.test(job.position)) return null;\n  return {\n    title: job.position,\n    company: job.company,\n    location: str(job.location) || 'Remote',\n    salary: formatSalary(job.salary_min, job.salary_max),\n    description: job.description,\n    url: job.apply_url || job.url,\n    postedDate: toIso(job.date, false),\n  };\n}\n\nfunction normalize(input) {\n  const { himalayas, arbeitnow, remoteok } = input || {};\n  const sources = [\n    { name: 'Himalayas', items: himalayas, map: mapHimalayas },\n    { name: 'Arbeitnow', items: arbeitnow, map: mapArbeitnow },\n    { name: 'RemoteOK', items: Array.isArray(remoteok) ? remoteok.slice(1) : [], map: mapRemoteOk },\n  ];\n\n  const rows = [];\n  const seen = new Set();\n\n  for (const { name, items, map } of sources) {\n    if (!Array.isArray(items)) continue;\n    for (const job of items) {\n      if (!isObject(job)) continue;\n      try {\n        const m = map(job);\n        if (!m) continue;\n\n        const title = str(m.title);\n        const company = str(m.company);\n        const applyUrl = str(m.url);\n        const canonical = canonicalizeUrl(applyUrl);\n        if (!title || !company || !canonical || seen.has(canonical)) continue;\n        seen.add(canonical);\n\n        rows.push({\n          title,\n          company,\n          location: m.location,\n          salary: m.salary,\n          source: name,\n          description: cleanText(m.description, 400),\n          apply_url: applyUrl,\n          canonical_url: canonical,\n          posted_date: m.postedDate,\n          is_internship: INTERN.test(title),\n        });\n      } catch (_) {\n        // one malformed job must never stop the batch\n      }\n    }\n  }\n  return rows;\n}\n\n// ── n8n glue: read the three fetch nodes and emit one item holding all rows ──\nconst fromNode = (name, key) => {\n  try {\n    const json = $(name).first()?.json;\n    return key ? json?.[key] : json;\n  } catch (e) {\n    return null;\n  }\n};\nconst allItems = (name) => {\n  try {\n    return $(name).all().map((item) => item.json);\n  } catch (e) {\n    return [];\n  }\n};\n\nconst rows = normalize({\n  himalayas: fromNode('Fetch Himalayas Jobs', 'jobs'),\n  arbeitnow: fromNode('Fetch Arbeitnow Jobs', 'data'),\n  remoteok: allItems('Fetch RemoteOK Jobs'),\n});\n\nreturn rows.length > 0 ? [{ json: { rows } }] : [];\n"
+      }
+    },
+    {
+      "id": "save",
+      "name": "Save to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1300,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/listings?on_conflict=canonical_url",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "resolution=ignore-duplicates,return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.rows) }}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Himalayas Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking 'Test workflow'": {
+      "main": [
+        [
+          {
+            "node": "Fetch Himalayas Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Himalayas Jobs": {
+      "main": [
+        [
+          {
+            "node": "Fetch Arbeitnow Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Arbeitnow Jobs": {
+      "main": [
+        [
+          {
+            "node": "Fetch RemoteOK Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch RemoteOK Jobs": {
+      "main": [
+        [
+          {
+            "node": "Normalize & Deduplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize & Deduplicate": {
+      "main": [
+        [
+          {
+            "node": "Save to Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
 }
