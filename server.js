@@ -1,404 +1,208 @@
-﻿require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
+'use strict';
+
+/**
+ * Scout — AI Job Application Copilot
+ * Local application server
+ *
+ * Responsibilities:
+ *  - Serve the /apply endpoint (triggers browser automation)
+ *  - Serve the /profile endpoint (for dashboard display)
+ *  - Poll Supabase for pending applications
+ *
+ * This file is intentionally thin. All business logic lives in src/.
+ */
+
+require('dotenv').config();
+
+const express    = require('express');
+const cors       = require('cors');
 const { chromium } = require('playwright');
-const fs = require('fs');
-const path = require('path');
-const pdfParse = require('pdf-parse');
+const log        = require('./src/logger');
+const { getProfile } = require('./src/config/profile');
+const { getSupabase, updateApplication } = require('./src/db/supabase');
+const { detectATS, getAdapter }          = require('./src/adapters/index');
+
+// ─── Startup ──────────────────────────────────────────────────────────────────
+
+const PORT     = process.env.PORT || 3001;
+const isCloud  = process.platform === 'linux' || !!(process.env.RENDER || process.env.RAILWAY_ENVIRONMENT);
+const isHeadless = process.env.HEADLESS
+  ? process.env.HEADLESS === 'true'
+  : isCloud;
+
+// Validate profile on startup
+const profile = getProfile();
+log.info('Scout application server starting', { port: PORT, headless: isHeadless });
+
+// ─── Express setup ────────────────────────────────────────────────────────────
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use((req, res, next) => {
-  req.url = req.url.replace(/\/{2,}/g, '/');
-  next();
+
+// ─── Routes ───────────────────────────────────────────────────────────────────
+
+/**
+ * GET /profile
+ * Returns a safe subset of the candidate profile for the dashboard.
+ * Never returns email, phone, or resume path.
+ */
+app.get('/profile', (req, res) => {
+  const p = getProfile();
+  res.json({
+    name: `${p.personal?.firstName || ''} ${p.personal?.lastName || ''}`.trim(),
+    location: p.personal?.location,
+    links: p.links,
+    education: p.education,
+    skills: p.skills,
+    preferences: p.preferences,
+  });
 });
 
-// Basic health check endpoints for cloud deployment platforms
-app.get('/', (req, res) => res.json({ status: 'ok', service: 'Scout Job Automation API' }));
-app.get('/health', (req, res) => res.json({ status: 'healthy' }));
+/**
+ * GET /health
+ * Simple health check for the dashboard to verify local server is running.
+ */
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', version: '2.0.0', headless: isHeadless });
+});
 
-// Helper function to call Azure OpenAI for custom questions
-async function answerCustomQuestions(questions, profile, jobDescription) {
-  if (!questions || questions.length === 0) return {};
-  
-  const prompt = `
-You are a job application assistant. Answer the following custom application questions based on the candidate's profile, their full resume, and the job description.
-Align the candidate's experience with the job description to provide compelling, highly-tailored answers.
-
-Candidate Profile Summary: ${JSON.stringify(profile)}
-Candidate Resume Text:
-${profile.resume_text || "Not provided"}
-
-Job Description:
-${jobDescription.substring(0, 6000)} // Truncated to avoid token limits
-
-Questions to answer:
-${questions.map(q => `- ID: ${q.id}, Label: "${q.label}"`).join('\n')}
-
-Respond ONLY with a JSON object where the keys are the Question IDs and the values are the answers. If you don't know the answer or it's highly subjective/requires human input, output an empty string for that ID. Do NOT include any markdown formatting or code blocks.
-`;
-
-  if (!process.env.AZURE_OPENAI_ENDPOINT || !process.env.AZURE_OPENAI_KEY || !process.env.AZURE_OPENAI_DEPLOYMENT) {
-    console.warn('Azure OpenAI environment variables not fully configured. Skipping LLM answers.');
-    return {};
-  }
-
-  const baseEndpoint = process.env.AZURE_OPENAI_ENDPOINT.replace(/\/openai\/v1\/?$/, '');
-  const url = `${baseEndpoint}/openai/deployments/${process.env.AZURE_OPENAI_DEPLOYMENT}/chat/completions?api-version=2024-10-21`;
-  
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'api-key': process.env.AZURE_OPENAI_KEY
-      },
-      body: JSON.stringify({
-        messages: [{ role: 'user', content: prompt }],
-        max_completion_tokens: 2000
-      })
-    });
-    
-    if (!res.ok) {
-      console.error('LLM API Error:', res.status, await res.text());
-      return {};
-    }
-    
-    const data = await res.json();
-    let content = data.choices[0].message.content.trim();
-    if (content.startsWith('```json')) {
-      content = content.replace(/^```json\n/, '').replace(/\n```$/, '');
-    } else if (content.startsWith('```')) {
-      content = content.replace(/^```\n/, '').replace(/\n```$/, '');
-    }
-    
-    return JSON.parse(content);
-  } catch(e) {
-    console.error("LLM parse or fetch error:", e);
-    return {};
-  }
-}
-
-app.post('/inspect', async (req, res) => {
-  const { url } = req.body;
-  if (!url) return res.status(400).json({ error: 'Missing job URL' });
-
+/**
+ * POST /apply
+ * Body: { url, jobId?, title?, company?, description? }
+ *
+ * Launches Playwright, detects ATS, runs the fill pipeline,
+ * and returns the fill report. Does NOT auto-submit.
+ */
+app.post('/apply', async (req, res) => {
   let browser = null;
+  const startedAt = new Date().toISOString();
+
   try {
-    const isCloud = process.platform === 'linux' || !!(process.env.RENDER || process.env.RAILWAY_ENVIRONMENT || process.env.NODE_ENV === 'production');
-    const isHeadless = process.env.HEADLESS ? process.env.HEADLESS === 'true' : isCloud;
+    const { url, jobId, title = '', company = '', description = '' } = req.body;
+    if (!url) return res.status(400).json({ error: 'Missing job URL' });
+
+    const job = { id: jobId, title, company, description, apply_url: url };
+
+    log.info('Starting application', { url: url.substring(0, 80), title, company });
 
     browser = await chromium.launch({
       headless: isHeadless,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
+
     const page = await browser.newPage();
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.setDefaultTimeout(30000);
 
-    const screenshot = await page.screenshot({ encoding: 'base64' });
-    const inputs = await page.$$eval('input, textarea, select', els =>
-      els.map(el => {
-        let label = null;
-        if (el.id) {
-          const lbl = document.querySelector(`label[for="${el.id}"]`);
-          if (lbl) label = lbl.innerText.trim();
-        }
-        if (!label) {
-          const parentLabel = el.closest('label');
-          if (parentLabel) label = parentLabel.innerText.trim();
-        }
-        if (!label && el.getAttribute('aria-label')) {
-          label = el.getAttribute('aria-label');
-        }
-        return {
-          tag: el.tagName, type: el.type || null, name: el.name || null,
-          id: el.id || null, placeholder: el.placeholder || null, label
-        };
-      })
-    );
+    // Status: opening browser
+    if (jobId) await updateApplication(jobId, { status: 'application_opened', started_at: startedAt });
 
-    await browser.close();
-    res.json({ inputs, screenshot });
-  } catch(err) {
-    if (browser) { try { await browser.close(); } catch(e) {} }
-    res.status(500).json({ error: err.message });
-  }
-});
+    await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
 
-app.all('/apply', async (req, res) => {
-  let browser = null;
-  try {
-    const url = (req.body && req.body.url) || (req.query && req.query.url);
-    if (!url) {
-      return res.status(400).json({ error: 'Missing job URL' });
+    // Detect ATS
+    const atsName = await detectATS(url, page);
+    const adapter = getAdapter(atsName);
+    log.info('ATS detected', { ats: atsName });
+
+    if (jobId) await updateApplication(jobId, { status: 'form_analyzed', ats_platform: atsName });
+
+    // Run the fill pipeline
+    const result = await adapter.fill(page, job, { useLLM: true, generateAnswers: true });
+
+    if (jobId) {
+      await updateApplication(jobId, {
+        status: 'autofill_completed',
+        ats_platform: atsName,
+        fields_detected: (result.report?.total || 0),
+        fields_filled:   (result.report?.filled || 0),
+        fields_skipped:  (result.report?.skipped || 0),
+        ai_questions_answered: (result.report?.aiGenerated || 0),
+        fill_report:     result.report,
+      });
     }
 
-    // Load profile from file, env, or fallback default
-    let profile = {};
-    const profilePath = path.join(__dirname, 'profile.json');
-    if (fs.existsSync(profilePath)) {
-      try {
-        profile = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
-      } catch (e) {
-        console.warn('Could not parse profile.json:', e.message);
-      }
-    } else if (process.env.PROFILE_JSON) {
-      try {
-        profile = JSON.parse(process.env.PROFILE_JSON);
-      } catch(e) {
-        console.warn('Could not parse PROFILE_JSON env var:', e.message);
-      }
-    }
-    
-    // Sensible fallbacks if profile fields missing
-    profile.first_name = profile.first_name || process.env.CANDIDATE_FIRST_NAME || "Sriram";
-    profile.last_name = profile.last_name || process.env.CANDIDATE_LAST_NAME || "Kolli";
-    profile.email = profile.email || process.env.CANDIDATE_EMAIL || "kollisriram6@gmail.com";
-    profile.phone = profile.phone || process.env.CANDIDATE_PHONE || "+91 9581697955";
-    profile.location = profile.location || process.env.CANDIDATE_LOCATION || "India";
-
-    // Dynamically parse the PDF resume if exists
-    if (profile.resume_path && fs.existsSync(profile.resume_path)) {
-      try {
-        console.log('Parsing PDF resume...');
-        const dataBuffer = fs.readFileSync(profile.resume_path);
-        const pdfData = await pdfParse(dataBuffer);
-        profile.resume_text = pdfData.text;
-      } catch (e) {
-        console.warn('Could not parse PDF resume:', e.message);
-      }
-    }
-
-    const isCloud = process.platform === 'linux' || !!(process.env.RENDER || process.env.RAILWAY_ENVIRONMENT || process.env.NODE_ENV === 'production');
-    const isHeadless = process.env.HEADLESS ? process.env.HEADLESS === 'true' : isCloud;
-
-    console.log(`Launching Playwright (headless: ${isHeadless})...`);
-    browser = await chromium.launch({
-      headless: isHeadless,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process',
-        '--disable-gpu'
-      ]
+    log.info('Autofill complete — awaiting human review', {
+      ats: atsName,
+      filled: result.filled?.length,
+      skipped: result.skipped?.length,
+      errors: result.errors?.length,
     });
 
-    const context = await browser.newContext();
-    const page = await context.newPage();
-
-    console.log(`Navigating to ${url}...`);
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-
-    const jobDescription = await page.evaluate(() => document.body.innerText || '');
-
-    const inputs = await page.$$eval('input, textarea, select', els =>
-      els.map(el => {
-        let label = null;
-        if (el.id) {
-          const lbl = document.querySelector(`label[for="${el.id}"]`);
-          if (lbl) label = lbl.innerText.trim();
-        }
-        if (!label) {
-          const parentLabel = el.closest('label');
-          if (parentLabel) label = parentLabel.innerText.trim();
-        }
-        return { tag: el.tagName, type: el.type || null, id: el.id || null, label };
-      })
-    );
-
-    const standardFields = ['first_name', 'last_name', 'email', 'phone'];
-    const eeocKeywords = ['gender', 'hispanic', 'veteran', 'disability'];
-    const customQuestions = [];
-
-    for (const input of inputs) {
-      if (!input.id) continue;
-      
-      const lowerId = input.id.toLowerCase();
-      const lowerLabel = (input.label || '').toLowerCase();
-      
-      if (eeocKeywords.some(kw => lowerId.includes(kw) || lowerLabel.includes(kw))) {
-        continue;
-      }
-
-      if (lowerId === 'resume' && input.type === 'file' && profile.resume_path && fs.existsSync(profile.resume_path)) {
-        try {
-          await page.locator(`id=${input.id}`).setInputFiles(profile.resume_path);
-        } catch(e) {
-          console.warn(`Could not upload resume to ${input.id}`);
-        }
-      } 
-      else if (standardFields.includes(lowerId) && profile[lowerId]) {
-        try {
-          await page.locator(`id=${input.id}`).fill(profile[lowerId]);
-        } catch(e) {
-          console.warn(`Could not fill standard field ${input.id}`);
-        }
-      } 
-      else if (input.id.startsWith('question_') && (input.type === 'text' || input.tag === 'TEXTAREA')) {
-        customQuestions.push(input);
-      }
-    }
-
-    let generatedAnswers = {};
-    if (customQuestions.length > 0 && profile) {
-      console.log(`Querying LLM for ${customQuestions.length} custom questions...`);
-      generatedAnswers = await answerCustomQuestions(customQuestions, profile, jobDescription);
-      
-      for (const [id, answer] of Object.entries(generatedAnswers)) {
-        if (answer) {
-          try {
-            await page.locator(`id=${id}`).fill(answer);
-          } catch(e) {
-            console.warn(`Could not fill custom question ${id}`);
-          }
-        }
-      }
-    }
-    
+    // In headless mode, take a screenshot and close
     let screenshotBase64 = null;
     if (isHeadless) {
       screenshotBase64 = await page.screenshot({ fullPage: true, encoding: 'base64' });
       await browser.close();
       browser = null;
     }
+    // In headed mode, keep browser open for human review — DO NOT close
 
-    res.json({ 
-      status: 'AWAITING_HUMAN_REVIEW', 
-      message: isHeadless 
-        ? 'Application drafted in cloud browser.' 
-        : 'Form pre-filled. Please review the open browser and submit manually.',
+    res.json({
+      platform: atsName,
+      filled:   result.filled,
+      skipped:  result.skipped,
+      errors:   result.errors,
+      report:   result.report,
       screenshot: screenshotBase64 ? `data:image/png;base64,${screenshotBase64}` : null,
-      llm_answers: generatedAnswers
+      status: isHeadless ? 'autofill_completed' : 'awaiting_review',
+      note: isHeadless
+        ? 'Application drafted in cloud browser.'
+        : 'Browser is open — please review all fields, then submit manually.',
     });
 
   } catch (error) {
-    console.error('Apply error:', error);
+    log.error('Application pipeline error', { error: error.message, stack: error.stack?.substring(0, 500) });
+
     if (browser) {
-      try { await browser.close(); } catch(e) {}
+      try { await browser.close(); } catch (_) {}
     }
+
+    const { jobId } = req.body || {};
+    if (jobId) {
+      await updateApplication(jobId, {
+        status: 'failed',
+        error_message: error.message,
+        completed_at: new Date().toISOString(),
+      }).catch(() => {});
+    }
+
     res.status(500).json({ error: error.message });
   }
 });
 
-// LEVER APPLICATION LOGIC
-const LEVER_FIELDS = {
-  'name': 'full_name',
-  'email': 'email',
-  'phone': 'phone',
-  'urls[LinkedIn]': 'linkedin',
-  'urls[GitHub]': 'github',
-  'urls[Portfolio]': 'portfolio'
-};
-
-const LEVER_NEVER_TOUCH = [
-  'accountId', 'linkedInData', 'origin', 'referer', 'timezone', 
-  'socialReferralKey', 'socialSource', 'resumeStorageId', 'h-captcha-response', 'source'
-];
-
-app.post('/apply-lever', async (req, res) => {
-  let browser = null;
+/**
+ * POST /corrections
+ * Body: { platform, fieldSignature, meaning, confidence }
+ * Records a user correction for the learning system.
+ */
+app.post('/corrections', async (req, res) => {
   try {
-    const { url } = req.body;
-    if (!url) return res.status(400).json({ error: 'Missing job URL' });
+    const { platform, domain, fieldSignature, meaning, confidence = 1.0 } = req.body;
+    if (!fieldSignature || !meaning) return res.status(400).json({ error: 'Missing fieldSignature or meaning' });
 
-    // Load profile from file, env, or fallback default
-    let profile = {};
-    const profilePath = path.join(__dirname, 'profile.json');
-    if (fs.existsSync(profilePath)) {
-      try {
-        profile = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
-      } catch (e) {
-        console.warn('Could not parse profile.json:', e.message);
-      }
-    } else if (process.env.PROFILE_JSON) {
-      try {
-        profile = JSON.parse(process.env.PROFILE_JSON);
-      } catch(e) {
-        console.warn('Could not parse PROFILE_JSON env var:', e.message);
-      }
-    }
-    
-    // Set up standard fallback fields
-    profile.first_name = profile.first_name || process.env.CANDIDATE_FIRST_NAME || "Sriram";
-    profile.last_name = profile.last_name || process.env.CANDIDATE_LAST_NAME || "Kolli";
-    profile.full_name = profile.full_name || (profile.first_name + ' ' + profile.last_name);
-    profile.email = profile.email || process.env.CANDIDATE_EMAIL || "kollisriram6@gmail.com";
-    profile.phone = profile.phone || process.env.CANDIDATE_PHONE || "+91 9581697955";
-
-    const isCloud = process.platform === 'linux' || !!(process.env.RENDER || process.env.RAILWAY_ENVIRONMENT || process.env.NODE_ENV === 'production');
-    const isHeadless = process.env.HEADLESS ? process.env.HEADLESS === 'true' : isCloud;
-
-    console.log(`Launching Playwright for Lever (headless: ${isHeadless})...`);
-    browser = await chromium.launch({
-      headless: isHeadless,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
-    const page = await browser.newPage();
-    await page.goto(url, { waitUntil: 'networkidle' });
-
-    const filled = [];
-    const skipped = [];
-    const inputs = await page.$$('input, textarea, select');
-
-    for (const el of inputs) {
-      const name = await el.getAttribute('name');
-      const type = await el.getAttribute('type');
-
-      if (type === 'hidden' || LEVER_NEVER_TOUCH.includes(name)) {
-        skipped.push({ name, reason: 'Lever-internal or captcha — never touched' });
-        continue;
-      }
-      
-      if (type === 'file' && name === 'resume' && profile.resume_path && fs.existsSync(profile.resume_path)) {
-        await el.setInputFiles(profile.resume_path);
-        filled.push({ name, value: profile.resume_path });
-        continue;
-      }
-      
-      if (LEVER_FIELDS[name]) {
-        const val = profile[LEVER_FIELDS[name]] || (profile.links && profile.links[LEVER_FIELDS[name]]);
-        if (val) { 
-          await el.fill(val); 
-          filled.push({ name, value: val }); 
-          continue; 
-        }
-      }
-      
-      skipped.push({ name: name || '(no name)', reason: 'left for manual review' });
-    }
-
-    console.log('Filled:', filled); 
-    console.log('Skipped:', skipped);
-    res.json({ filled, skipped, note: 'Browser open — review, complete the rest, submit yourself.' });
-
-  } catch (error) {
-    console.error('Apply-lever error:', error);
-    if (browser) { try { await browser.close(); } catch(e) {} }
-    res.status(500).json({ error: error.message });
+    const { upsertFieldMapping } = require('./src/db/supabase');
+    await upsertFieldMapping({ platform, domain, fieldSignature, meaning, confidence });
+    log.info('Field mapping correction recorded', { platform, fieldSignature, meaning });
+    res.json({ success: true });
+  } catch (e) {
+    log.error('Failed to record correction', { error: e.message });
+    res.status(500).json({ error: e.message });
   }
 });
 
-// Global Express error handler returning JSON instead of HTML
+// ─── Global error handler ─────────────────────────────────────────────────────
+
 app.use((err, req, res, next) => {
-  console.error('Unhandled server error:', err);
+  log.error('Unhandled server error', { error: err.message });
   res.status(500).json({ error: err.message || 'Internal Server Error' });
 });
 
+// ─── Supabase polling ─────────────────────────────────────────────────────────
 
-// SUPABASE POLLING LOGIC
-const { createClient } = require('@supabase/supabase-js');
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL; 
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabase = getSupabase();
+if (supabase) {
+  log.info('Supabase polling enabled — checking for pending applications every 8 seconds');
 
-if (supabaseUrl && supabaseKey) {
-  const supabase = createClient(supabaseUrl, supabaseKey);
-  console.log('Supabase polling enabled. Checking for pending applications every 5 seconds...');
-  
   setInterval(async () => {
     try {
       const { data, error } = await supabase
@@ -407,43 +211,57 @@ if (supabaseUrl && supabaseKey) {
         .eq('status', 'pending_application')
         .limit(1);
 
-      if (error) return;
+      if (error || !data || data.length === 0) return;
 
-      if (data && data.length > 0) {
-        const app = data[0];
-        const job = app.listings;
-        console.log(`\n[Queue] Picked up pending job ${job.id}: ${job.title}`);
-        
-        // Prevent double processing
-        await supabase.from('applications').update({ status: 'applying' }).eq('id', app.id);
+      const appRecord = data[0];
+      const job = appRecord.listings;
+      log.info('Picked up pending application', { jobId: job.id, title: job.title });
 
-        const url = job.apply_url || job.canonical_url;
-        const isLever = url && url.includes('jobs.lever.co');
-        
-        try {
-          if (isLever) {
-             await fetch(`http://localhost:${PORT}/apply-lever`, {
-               method: 'POST',
-               headers: { 'Content-Type': 'application/json' },
-               body: JSON.stringify({ url })
-             });
-          } else {
-             await fetch(`http://localhost:${PORT}/apply?url=${encodeURIComponent(url)}`);
-          }
-          
-          await supabase.from('applications').update({ status: 'Applied', status_updated_at: new Date().toISOString() }).eq('id', app.id);
-          console.log(`[Queue] Job ${job.id} marked as Applied!`);
-        } catch(err) {
-          console.error(`[Queue] Failed to process job ${job.id}:`, err.message);
-          await supabase.from('applications').update({ status: 'Failed', status_updated_at: new Date().toISOString() }).eq('id', app.id);
-        }
+      await supabase
+        .from('applications')
+        .update({ status: 'applying', status_updated_at: new Date().toISOString() })
+        .eq('id', appRecord.id);
+
+      const applyUrl = job.apply_url || job.canonical_url;
+
+      try {
+        const resp = await fetch(`http://localhost:${PORT}/apply`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url:         applyUrl,
+            jobId:       appRecord.id,
+            title:       job.title,
+            company:     job.company,
+            description: job.description || '',
+          }),
+        });
+
+        const result = await resp.json();
+
+        if (result.error) throw new Error(result.error);
+
+        // Status updated inside /apply route — just log here
+        log.info('Application autofill complete — awaiting human review', { jobId: job.id });
+
+      } catch (err) {
+        log.error('Application pipeline failed', { jobId: job.id, error: err.message });
+        await updateApplication(appRecord.id, {
+          status: 'failed',
+          error_message: err.message,
+          completed_at: new Date().toISOString(),
+        });
       }
+
     } catch (e) {
-      // ignore network blips
+      // Ignore transient network errors during polling
     }
-  }, 5000);
+  }, 8000);
 }
 
+// ─── Start ────────────────────────────────────────────────────────────────────
 
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`Scout apply-service listening on ${PORT}`));
+app.listen(PORT, () => {
+  log.info(`Scout apply-service ready on port ${PORT}`);
+  log.info('Endpoints: POST /apply, GET /profile, GET /health, POST /corrections');
+});

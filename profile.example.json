@@ -1,8 +1,56 @@
 {
-  "first_name": "Jane",
-  "last_name": "Doe",
-  "email": "jane.doe@example.com",
-  "phone": "+1 555-0199",
-  "location": "San Francisco, CA",
-  "resume_path": "./resume.pdf"
+  "personal": {
+    "firstName": "Jane",
+    "lastName": "Doe",
+    "email": "jane.doe@example.com",
+    "phone": "+1 555-0199",
+    "location": "San Francisco, CA, USA"
+  },
+  "links": {
+    "linkedin": "https://linkedin.com/in/janedoe",
+    "github": "https://github.com/janedoe",
+    "portfolio": "https://janedoe.dev"
+  },
+  "education": {
+    "university": "State University",
+    "degree": "B.Tech",
+    "specialization": "Computer Science and Engineering",
+    "graduationYear": "2025",
+    "cgpa": "8.5"
+  },
+  "experience": [
+    {
+      "company": "Acme Corp",
+      "role": "Software Engineering Intern",
+      "startDate": "June 2024",
+      "endDate": "August 2024",
+      "type": "Internship",
+      "description": "Built REST APIs with FastAPI, integrated PostgreSQL, and automated data pipelines.",
+      "technologies": ["Python", "FastAPI", "PostgreSQL", "Redis"]
+    }
+  ],
+  "skills": {
+    "languages": ["Python", "JavaScript", "TypeScript"],
+    "frameworks": ["Node.js", "Next.js", "FastAPI"],
+    "databases": ["PostgreSQL", "MongoDB"],
+    "cloud": ["AWS", "GCP"],
+    "ai": ["OpenAI API", "LangChain"],
+    "tools": ["Git", "Docker", "Linux"]
+  },
+  "projects": [
+    {
+      "name": "Example Project",
+      "description": "A sample project that demonstrates key engineering skills.",
+      "technologies": ["Node.js", "React"],
+      "url": "https://github.com/janedoe/example-project"
+    }
+  ],
+  "preferences": {
+    "preferredRoles": ["Software Engineer", "Full Stack Developer"],
+    "preferredLocations": ["Remote", "San Francisco"],
+    "remotePreference": "remote"
+  },
+  "resume": {
+    "defaultPath": "/path/to/Jane_Doe_Resume.pdf"
+  }
 }
