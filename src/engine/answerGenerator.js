@@ -13,7 +13,7 @@
  */
 
 const { profileForLLM } = require('../config/profile');
-const { generateAnswer } = require('../llm/azureClient');
+const { generateAnswer } = require('../llm');
 const log = require('../logger');
 
 /**

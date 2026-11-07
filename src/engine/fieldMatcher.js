@@ -173,7 +173,7 @@ function stage2Match(descriptor) {
 
 async function stage3Match(descriptor, platform) {
   // Lazy-load to avoid circular deps
-  const { classifyField } = require('../llm/azureClient');
+  const { classifyField } = require('../llm');
 
   // Build a minimal, non-PII description for the LLM
   const fieldDescription = {
