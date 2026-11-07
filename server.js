@@ -33,6 +33,7 @@ const { createCorsOptions, resolveHost } = require('./src/api/access');
 const { detectATS, getAdapter }          = require('./src/adapters/index');
 const { applyBodySchema, validateBody } = require('./src/api/schemas');
 const { createRouter }                   = require('./src/api/routes');
+const { buildApplicationUpdate }         = require('./src/api/applicationUpdate');
 const { captureScreenshotDataUrl }       = require('./src/engine/screenshot');
 const { createQueue }                    = require('./src/queue/applicationQueue');
 
@@ -100,15 +101,7 @@ app.post('/apply', validateBody(applyBodySchema), async (req, res) => {
     const result = await adapter.fill(page, job, { useLLM: true, generateAnswers: true });
 
     if (jobId) {
-      await updateApplication(jobId, {
-        status: 'autofill_completed',
-        ats_platform: atsName,
-        fields_detected: (result.report?.total || 0),
-        fields_filled:   (result.report?.filled || 0),
-        fields_skipped:  (result.report?.skipped || 0),
-        ai_questions_answered: (result.report?.aiGenerated || 0),
-        fill_report:     result.report,
-      });
+      await updateApplication(jobId, buildApplicationUpdate(result, atsName));
     }
 
     log.info('Autofill complete — awaiting human review', {
@@ -134,10 +127,10 @@ app.post('/apply', validateBody(applyBodySchema), async (req, res) => {
       errors:   result.errors,
       report:   result.report,
       screenshot,
-      status: isHeadless ? 'autofill_completed' : 'awaiting_review',
-      note: isHeadless
+      status: result.note || !isHeadless ? 'awaiting_review' : 'autofill_completed',
+      note: result.note || (isHeadless
         ? 'Application drafted in cloud browser.'
-        : 'Browser is open — please review all fields, then submit manually.',
+        : 'Browser is open — please review all fields, then submit manually.'),
     });
 
   } catch (error) {

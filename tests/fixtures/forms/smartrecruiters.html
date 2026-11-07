@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Apply — SmartRecruiters style</title></head>
+<body>
+  <main>
+    <h1>Data Engineer</h1>
+    <!-- The whole form is a web component with an open shadow root -->
+    <application-form id="app"></application-form>
+  </main>
+  <script>
+    window.__submitted = false;
+    const root = document.getElementById('app').attachShadow({ mode: 'open' });
+    root.innerHTML = `
+      <form id="sr-form">
+        <h2>Contact info</h2>
+        <div><label for="sr-first">First name</label><input id="sr-first" name="firstName" type="text"></div>
+        <div><label for="sr-last">Last name</label><input id="sr-last" name="lastName" type="text"></div>
+        <div><label for="sr-email">Email</label><input id="sr-email" name="email" type="email"></div>
+        <div><label for="sr-phone">Phone</label><input id="sr-phone" name="phoneNumber" type="tel"></div>
+        <div><label for="sr-cv">Resume</label><input id="sr-cv" name="resume" type="file"></div>
+        <div><label for="sr-web">Website</label><input id="sr-web" name="website" type="url"></div>
+        <div><span>Why this job?</span><textarea></textarea></div>
+        <div><label><input id="sr-consent" name="consent" type="checkbox"> I agree to the privacy policy</label></div>
+        <button type="submit" id="sr-submit">Submit</button>
+      </form>`;
+    root.getElementById('sr-form').addEventListener('submit', function (e) { e.preventDefault(); window.__submitted = true; });
+  </script>
+</body>
+</html>

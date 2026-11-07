@@ -99,4 +99,41 @@ async function runPipeline(target, job = {}, { useLLM = true, generateAnswers = 
   return { ...executionResults, report };
 }
 
-module.exports = { runPipeline, addResumeUploads };
+/**
+ * Combine the results of several pipeline runs (one per step of a multi-step form).
+ * Results with no report (a step with no fillable fields) contribute nothing to the counts.
+ */
+function mergeResults(results) {
+  const filled = [];
+  const skipped = [];
+  const errors = [];
+  const reports = [];
+  for (const r of results) {
+    filled.push(...(r.filled || []));
+    skipped.push(...(r.skipped || []));
+    errors.push(...(r.errors || []));
+    if (r.report) reports.push(r.report);
+  }
+  if (reports.length === 0) return { filled, skipped, errors, report: null };
+
+  const sum = (key) => reports.reduce((n, r) => n + (r[key] || 0), 0);
+  const stage = (key) => reports.reduce((n, r) => n + (r.stageBreakdown?.[key] || 0), 0);
+  const detail = (key) => reports.flatMap(r => r.details?.[key] || []);
+
+  return {
+    filled, skipped, errors,
+    report: {
+      total: sum('total'),
+      filled: sum('filled'),
+      skipped: sum('skipped'),
+      errors: sum('errors'),
+      aiGenerated: sum('aiGenerated'),
+      stageBreakdown: {
+        learned: stage('learned'), deterministic: stage('deterministic'), semantic: stage('semantic'), llm: stage('llm'),
+      },
+      details: { filled: detail('filled'), skipped: detail('skipped'), errors: detail('errors') },
+    },
+  };
+}
+
+module.exports = { runPipeline, addResumeUploads, mergeResults };

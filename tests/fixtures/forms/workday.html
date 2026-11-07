@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Workday — Apply</title></head>
+<body>
+  <div data-automation-id="applyFlow">
+    <h2 data-automation-id="stepTitle" id="title"></h2>
+    <div id="step"></div>
+    <!-- Like the real wizard, the last step reuses this same button id with the label "Submit" -->
+    <button data-automation-id="bottom-navigation-next-button" id="next" type="button"></button>
+    <div id="error" data-automation-id="errorMessage" hidden>Please fix the errors below.</div>
+  </div>
+  <script>
+    const blocked = new URLSearchParams(location.search).get('blocked') === '1';
+    const steps = [
+      { title: 'My Information', html: `
+        <label for="fn">First Name</label><input id="fn" name="legalName--firstName" type="text">
+        <label for="ln">Last Name</label><input id="ln" name="legalName--lastName" type="text">
+        <label for="em">Email</label><input id="em" name="email" type="email">
+        <label for="ph">Phone Number</label><input id="ph" name="phoneNumber" type="tel">` },
+      { title: 'My Experience', html: `
+        <label for="school">School or University</label><input id="school" name="school" type="text">
+        <label for="li">LinkedIn</label><input id="li" name="linkedin" type="text">
+        <label for="cv">Resume/CV</label><input id="cv" name="resume" type="file">` },
+      { title: 'Application Questions', html: `
+        <label for="why">Why do you want to join us?</label><textarea id="why" name="why" ${blocked ? 'required' : ''}></textarea>
+        <label for="auth">Are you legally authorized to work in the country in which this job is located?</label>
+        <select id="auth" name="auth"><option value="">Select One</option><option>Yes</option><option>No</option></select>` },
+      { title: 'Voluntary Disclosures', html: `
+        <label for="gender">Gender</label>
+        <select id="gender" name="gender"><option value="">Select One</option><option>Male</option><option>Female</option></select>` },
+      { title: 'Review', html: '<p>Please review your application before submitting.</p>', final: true },
+    ];
+
+    window.__snapshots = [];
+    window.__submitClicks = 0;
+    window.__submitted = false;
+    window.__step = '';
+    let index = 0;
+
+    function snapshot() {
+      const values = {};
+      document.querySelectorAll('#step input, #step select, #step textarea').forEach(function (el) {
+        values[el.id] = el.type === 'file' ? Array.from(el.files).map(function (f) { return f.name; }).join(',') : el.value;
+      });
+      window.__snapshots.push(values);
+    }
+    function render() {
+      const s = steps[index];
+      document.getElementById('title').textContent = s.title;
+      document.getElementById('step').innerHTML = s.html;
+      document.getElementById('next').textContent = s.final ? 'Submit' : 'Save and Continue';
+      document.getElementById('error').hidden = true;
+      window.__step = s.title;
+    }
+    document.getElementById('next').addEventListener('click', function () {
+      const s = steps[index];
+      if (s.final) { window.__submitClicks++; window.__submitted = true; return; }
+      const required = document.querySelector('#step [required]');
+      if (required && !required.value) { document.getElementById('error').hidden = false; return; }
+      snapshot();
+      index++;
+      render();
+    });
+    render();
+  </script>
+</body>
+</html>

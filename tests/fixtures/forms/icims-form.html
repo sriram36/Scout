@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>iCIMS application</title></head>
+<body>
+  <form id="icims-form" action="/submit" method="post">
+    <h2>Personal Information</h2>
+    <div><label for="firstname">First Name</label><input id="firstname" name="FirstName" type="text"></div>
+    <div><label for="lastname">Last Name</label><input id="lastname" name="LastName" type="text"></div>
+    <div><label for="emailaddr">Email Address</label><input id="emailaddr" name="Email" type="text"></div>
+    <div><label for="phonenum">Phone Number</label><input id="phonenum" name="PhoneNumber" type="text"></div>
+    <div><label for="resumefile">Resume</label><input id="resumefile" name="Resume" type="file"></div>
+    <h2>Equal opportunity</h2>
+    <div>
+      <label for="ethnicity">Race/Ethnicity</label>
+      <select id="ethnicity" name="Ethnicity"><option value="">Select…</option><option value="a">Asian</option><option value="w">White</option></select>
+    </div>
+    <button type="submit" id="icims-submit">Submit</button>
+  </form>
+  <script>
+    window.__submitted = false;
+    document.getElementById('icims-form').addEventListener('submit', function (e) { e.preventDefault(); window.__submitted = true; });
+  </script>
+</body>
+</html>

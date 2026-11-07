@@ -14,17 +14,13 @@ const log = require('../logger');
 // ─── Hostname detection (fast, no DOM needed) ─────────────────────────────────
 
 const HOST_MAP = [
-  { host: 'greenhouse.io',        name: 'greenhouse' },
-  { host: 'boards.greenhouse.io', name: 'greenhouse' },
-  { host: 'lever.co',             name: 'lever' },
-  { host: 'jobs.lever.co',        name: 'lever' },
-  { host: 'ashbyhq.com',          name: 'ashby' },
-  { host: 'jobs.ashbyhq.com',     name: 'ashby' },
-  { host: 'myworkdayjobs.com',    name: 'workday' },
-  { host: 'wd1.myworkdayjobs.com',name: 'workday' },
-  { host: 'wd3.myworkdayjobs.com',name: 'workday' },
-  { host: 'icims.com',            name: 'icims' },
-  { host: 'smartrecruiters.com',  name: 'smartrecruiters' },
+  { host: 'greenhouse.io',       name: 'greenhouse' },
+  { host: 'lever.co',            name: 'lever' },
+  { host: 'ashbyhq.com',         name: 'ashby' },
+  { host: 'myworkdayjobs.com',   name: 'workday' },
+  { host: 'myworkdaysite.com',   name: 'workday' },
+  { host: 'icims.com',           name: 'icims' },
+  { host: 'smartrecruiters.com', name: 'smartrecruiters' },
 ];
 
 // ─── DOM fingerprinting (for ambiguous URLs) ──────────────────────────────────
@@ -34,6 +30,7 @@ const DOM_FINGERPRINTS = [
   { selector: '[data-qa="lever-application-form"], .lever-apply',           name: 'lever' },
   { selector: '[data-ashby-form], .ashby-form',                             name: 'ashby' },
   { selector: '[data-automation-id="applicationWidget"]',                   name: 'workday' },
+  { selector: '#icims_content_iframe',                                      name: 'icims' },
 ];
 
 /**
@@ -43,7 +40,8 @@ function detectFromURL(url) {
   try {
     const { hostname } = new URL(url);
     for (const { host, name } of HOST_MAP) {
-      if (hostname.includes(host)) return name;
+      // match the registered domain or a subdomain of it, never a look-alike such as greenhouse.io.evil.com
+      if (hostname === host || hostname.endsWith('.' + host)) return name;
     }
   } catch (_) {}
   return null;
@@ -95,10 +93,9 @@ function getAdapter(atsName) {
     lever:          () => require('./lever'),
     ashby:          () => require('./ashby'),
     generic:        () => require('./generic'),
-    // Workday and iCIMS are complex — fall through to generic for now
-    workday:        () => require('./generic'),
-    icims:          () => require('./generic'),
-    smartrecruiters:() => require('./generic'),
+    workday:        () => require('./workday'),
+    icims:          () => require('./icims'),
+    smartrecruiters:() => require('./smartrecruiters'),
   };
 
   const loader = ADAPTERS[atsName] || ADAPTERS.generic;
