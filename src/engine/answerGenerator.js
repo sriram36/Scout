@@ -14,6 +14,7 @@
 
 const { profileForLLM } = require('../config/profile');
 const { generateAnswer } = require('../llm');
+const { shouldNeverTouch } = require('./safetyFilter');
 const log = require('../logger');
 
 /**
@@ -25,13 +26,19 @@ const log = require('../logger');
  * @returns {object[]}            — subset of descriptors needing AI answers
  */
 function identifyFreeTextQuestions(descriptors, fillPlan) {
-  const plannedElementIds = new Set(fillPlan.filter(p => p.action !== 'skip').map(p => p.elementId));
   const unknownOrTextarea = fillPlan.filter(p =>
     p.action === 'skip' &&
     p.skipReason === 'Could not classify field' &&
-    (p.descriptor?.tag === 'textarea' || p.descriptor?.type === 'text')
+    (p.descriptor?.tag === 'textarea' || p.descriptor?.type === 'text') &&
+    questionText(p.descriptor) &&          // never ask the model about a question nobody has seen
+    !shouldNeverTouch(p.descriptor)        // backstop: protected or legal fields are never sent to the model
   );
   return unknownOrTextarea.map(p => p.descriptor).filter(Boolean);
+}
+
+/** The visible question of a field, or an empty string when the page gave us none. */
+function questionText(descriptor) {
+  return (descriptor?.label || descriptor?.placeholder || descriptor?.ariaLabel || '').trim();
 }
 
 /**
@@ -42,7 +49,8 @@ function identifyFreeTextQuestions(descriptors, fillPlan) {
  * @returns {Promise<{elementId, answer, confidence, evidence}>}
  */
 async function generateFieldAnswer(descriptor, job) {
-  const question = descriptor.label || descriptor.placeholder || descriptor.ariaLabel || 'Unknown question';
+  const question = questionText(descriptor);
+  if (!question || shouldNeverTouch(descriptor)) return null;
   const safeProfle = profileForLLM();
 
   log.info('Generating answer for question', { question: question.substring(0, 80), job: job.title });

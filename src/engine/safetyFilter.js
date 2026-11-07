@@ -7,6 +7,14 @@
  * must NEVER fill, regardless of what the LLM or rules say.
  *
  * Default behaviour: uncertain → skip. Never: uncertain → guess.
+ *
+ * A field is judged on its own texts (name, id, label, aria-label, placeholder), on the
+ * heading of the section it sits in, and on its option labels — a radio group's "label" is
+ * often just its first option ("Male"), and a Name field under "Voluntary Self-Identification
+ * of Disability" belongs to the form it is in, not to a rule about names.
+ *
+ * This is pattern-based and cannot be exhaustive; Scout never submits, so the candidate
+ * still reviews everything.
  */
 
 // ─── Pattern sets ─────────────────────────────────────────────────────────────
@@ -15,26 +23,74 @@
 const DEMOGRAPHIC_PATTERNS = [
   /gender/i,
   /pronouns?/i,
-  /sex\b/i,
-  /race/i,
+  /\bsex\b/i,
+  /\brace\b/i,
   /ethnic/i,
   /hispanic/i,
   /latino/i,
   /veteran/i,
-  /disability/i,
+  /disabilit/i,
   /disabled/i,
   /accommodation/i,
   /eeoc/i,
+  /\beeo\b/i,
   /equal.?employ/i,
+  /equal.?opportunit/i,
+  /self.?identif/i,
   /protected/i,
-  /age\b/i,
+  /\bage\b/i,
   /birth.?date/i,
   /date.?of.?birth/i,
   /national.?origin/i,
-  /religion/i,
+  /religio/i,
   /marital/i,
   /pregnan/i,
   /sexual.?orientation/i,
+  /transgender/i,
+  /non.?binary/i,
+  /^(male|female|man|woman)$/i,   // a radio group labelled by its first option
+];
+
+/**
+ * Legal-status questions (work authorization, sponsorship, citizenship, criminal record,
+ * clearance). Wrong answers can have legal consequences, so the candidate answers these.
+ */
+const LEGAL_STATUS_PATTERNS = [
+  /sponsor/i,
+  /work.?auth/i,
+  /authori[sz]ed.{0,30}work/i,
+  /legally.{0,30}(authori[sz]ed|eligible|permitted|allowed)/i,
+  /eligib/i,
+  /right.?to.?work/i,
+  /work.?permit/i,
+  /\bvisa\b/i,
+  /green.?card/i,
+  /\bh-?1b\b/i,
+  /\b(opt|cpt)\b/i,
+  /permanent.?resident/i,
+  /u\.?s\.?\s*person|\bitar\b|export.?control/i,
+  /citizen/i,
+  /immigration/i,
+  /background.?(check|screen)/i,
+  /convict/i,
+  /felon/i,
+  /criminal/i,
+  /misdemean/i,
+  /\bguilty\b|\bpled\b|\barrest/i,
+  /clearance/i,
+];
+
+/** Fields that ask about someone else — never fill them with the candidate's own details. */
+const THIRD_PARTY_PATTERNS = [
+  /emergency.?contact/i,
+  /\breferences?\b/i,
+  /referred.?by/i,
+  /next.?of.?kin/i,
+  /\bspouse\b/i,
+  /\bdependents?\b/i,
+  /beneficiar/i,
+  /\bguardian\b/i,
+  /\bsupervisor\b/i,
 ];
 
 /** CAPTCHA and bot-detection fields */
@@ -48,26 +104,6 @@ const CAPTCHA_PATTERNS = [
   /funcaptcha/i,
   /g-recaptcha/i,
   /h-captcha/i,
-];
-
-/**
- * Legal-status questions (work authorization, sponsorship, citizenship, criminal record,
- * clearance). Wrong answers can have legal consequences, so the candidate answers these.
- */
-const LEGAL_STATUS_PATTERNS = [
-  /sponsor/i,
-  /work.?auth/i,
-  /authori[sz]ed.{0,30}work/i,
-  /legally.{0,30}(authori[sz]ed|eligible|permitted|allowed)/i,
-  /right.?to.?work/i,
-  /work.?permit/i,
-  /visa/i,
-  /citizen/i,
-  /immigration/i,
-  /convict/i,
-  /felon/i,
-  /criminal/i,
-  /clearance/i,
 ];
 
 /** ATS internal / tracking fields that should never be manipulated */
@@ -96,8 +132,8 @@ const SECURITY_PATTERNS = [
   /password/i,
   /security.?question/i,
   /secret/i,
-  /pin\b/i,
-  /ssn/i,
+  /\bpin\b/i,
+  /\bssn\b/i,
   /social.?security/i,
   /tax.?id/i,
   /passport/i,
@@ -110,44 +146,109 @@ const BLOCKED_EXACT = new Set([
   '__RequestVerificationToken', '_token', 'csrf_token', 'authenticity_token',
 ]);
 
-// ─── Public API ───────────────────────────────────────────────────────────────
+/**
+ * Section headings that mark everything beneath them as protected. Deliberately narrower than
+ * the field patterns: a heading such as "Manage your application" or "Your data is protected"
+ * must not block a whole form.
+ */
+const SECTION_DEMOGRAPHIC_PATTERNS = [
+  /self.?identif/i,
+  /\beeo\b/i,
+  /equal.?(employ|opportunit)/i,
+  /voluntary.?(self|disclos)/i,
+  /demographic/i,
+  /disabilit/i,
+  /veteran/i,
+  /\bgender\b/i,
+  /\brace\b|ethnic/i,
+  /sexual.?orientation/i,
+];
+const SECTION_LEGAL_PATTERNS = [
+  /work.?auth/i,
+  /sponsor/i,
+  /\bvisa\b/i,
+  /immigration/i,
+  /citizen/i,
+  /criminal|convict/i,
+  /background.?check/i,
+  /legal.?(status|declaration)/i,
+];
+
+/** Answer options that only appear in demographic questions. */
+const OPTION_DEMOGRAPHIC_PATTERNS = [
+  /decline to (self.?)?(identify|answer|disclose)/i,
+  /hispanic|latino/i,
+  /veteran/i,
+  /i (do not|don'?t) wish to (answer|disclose|identify)/i,
+  /prefer not to (say|answer|disclose)/i,
+  /non.?binary|transgender/i,
+  /american indian|alaska native|pacific islander/i,
+];
+
+const REASONS = {
+  demographic: 'EEOC/demographic field — protected',
+  captcha:     'CAPTCHA — requires human action',
+  security:    'Security field — never auto-filled',
+  legal:       'Legal-status question — answer this yourself',
+  thirdParty:  'Asks about another person — fill this yourself',
+  tracking:    'ATS tracking field — skipped',
+  blocked:     'Blocked field name — skipped',
+  hidden:      'Hidden field — skipped',
+  password:    'Password field — skipped',
+  invisible:   'Invisible field — skipped',
+};
+
+const OWN_TEXT_CATEGORIES = [
+  ['demographic', DEMOGRAPHIC_PATTERNS],
+  ['captcha',     CAPTCHA_PATTERNS],
+  ['security',    SECURITY_PATTERNS],
+  ['legal',       LEGAL_STATUS_PATTERNS],
+  ['thirdParty',  THIRD_PARTY_PATTERNS],
+  ['tracking',    TRACKING_PATTERNS],
+];
+
+const matchesAny = (text, patterns) => patterns.some(p => p.test(text));
 
 /**
- * Returns true if the field must NEVER be touched by automation.
+ * Why a field must be left alone, or null if it may be considered.
  * Accepts a FieldDescriptor or a plain string (key/name/label).
+ * @returns {keyof REASONS | null}
  */
+function classify(fieldOrString) {
+  if (!fieldOrString) return null;
+
+  const field = typeof fieldOrString === 'string' ? {} : fieldOrString;
+  const texts = typeof fieldOrString === 'string'
+    ? [fieldOrString]
+    : [field.name, field.id, field.label, field.ariaLabel, field.placeholder].filter(Boolean);
+
+  if (field.type === 'hidden')   return 'hidden';
+  if (field.type === 'password') return 'password';
+  if (field.visible === false)   return 'invisible';
+
+  for (const [category, patterns] of OWN_TEXT_CATEGORIES) {
+    if (texts.some(t => matchesAny(t, patterns))) return category;
+  }
+  if (texts.some(t => BLOCKED_EXACT.has(t))) return 'blocked';
+
+  if (typeof field.sectionHeading === 'string') {
+    if (matchesAny(field.sectionHeading, SECTION_DEMOGRAPHIC_PATTERNS)) return 'demographic';
+    if (matchesAny(field.sectionHeading, SECTION_LEGAL_PATTERNS))       return 'legal';
+  }
+
+  if (Array.isArray(field.options)) {
+    const labels = field.options.map(o => (typeof o === 'string' ? o : o && o.label)).filter(Boolean);
+    if (labels.some(l => matchesAny(l, OPTION_DEMOGRAPHIC_PATTERNS))) return 'demographic';
+  }
+
+  return null;
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+/** Returns true if the field must NEVER be touched by automation. */
 function shouldNeverTouch(fieldOrString) {
-  if (!fieldOrString) return false;
-
-  // Accept either a FieldDescriptor object or a raw string
-  const texts = [];
-  if (typeof fieldOrString === 'string') {
-    texts.push(fieldOrString);
-  } else {
-    // FieldDescriptor
-    if (fieldOrString.name)        texts.push(fieldOrString.name);
-    if (fieldOrString.id)          texts.push(fieldOrString.id);
-    if (fieldOrString.label)       texts.push(fieldOrString.label);
-    if (fieldOrString.ariaLabel)   texts.push(fieldOrString.ariaLabel);
-    if (fieldOrString.placeholder) texts.push(fieldOrString.placeholder);
-    if (fieldOrString.type === 'hidden')   return true;
-    if (fieldOrString.type === 'password') return true;
-    if (fieldOrString.visible === false)   return true;
-  }
-
-  for (const text of texts) {
-    if (!text) continue;
-
-    // Exact match first (fastest)
-    if (BLOCKED_EXACT.has(text)) return true;
-
-    // Pattern checks
-    for (const pattern of [...DEMOGRAPHIC_PATTERNS, ...CAPTCHA_PATTERNS, ...LEGAL_STATUS_PATTERNS, ...TRACKING_PATTERNS, ...SECURITY_PATTERNS]) {
-      if (pattern.test(text)) return true;
-    }
-  }
-
-  return false;
+  return classify(fieldOrString) !== null;
 }
 
 /**
@@ -163,23 +264,8 @@ function isTooUncertain(confidence, threshold = 0.65) {
  * Useful for the fill report shown in the dashboard.
  */
 function getSkipReason(fieldOrString) {
-  const texts = typeof fieldOrString === 'string'
-    ? [fieldOrString]
-    : [fieldOrString?.name, fieldOrString?.id, fieldOrString?.label, fieldOrString?.ariaLabel, fieldOrString?.placeholder].filter(Boolean);
-
-  for (const text of texts) {
-    if (!text) continue;
-    if (DEMOGRAPHIC_PATTERNS.some(p => p.test(text))) return 'EEOC/demographic field — protected';
-    if (CAPTCHA_PATTERNS.some(p => p.test(text)))     return 'CAPTCHA — requires human action';
-    if (SECURITY_PATTERNS.some(p => p.test(text)))    return 'Security field — never auto-filled';
-    if (LEGAL_STATUS_PATTERNS.some(p => p.test(text))) return 'Legal-status question — answer this yourself';
-    if (TRACKING_PATTERNS.some(p => p.test(text)))    return 'ATS tracking field — skipped';
-    if (BLOCKED_EXACT.has(text))                       return 'Blocked field name — skipped';
-    if (fieldOrString?.type === 'hidden')              return 'Hidden field — skipped';
-    if (fieldOrString?.type === 'password')            return 'Password field — skipped';
-    if (fieldOrString?.visible === false)              return 'Invisible field — skipped';
-  }
-  return 'Safety rule matched';
+  const category = classify(fieldOrString);
+  return category ? REASONS[category] : 'Safety rule matched';
 }
 
 module.exports = { shouldNeverTouch, isTooUncertain, getSkipReason };

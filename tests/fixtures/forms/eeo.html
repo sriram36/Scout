@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Apply — EEO, legal and consent fields</title></head>
+<body>
+  <form id="f">
+    <fieldset>
+      <legend>Contact</legend>
+      <div><label for="fn">First Name</label><input id="fn" name="fn" type="text"></div>
+      <div><label for="em">Email</label><input id="em" name="em" type="email"></div>
+      <div><label><input type="checkbox" id="sms" name="sms"> I consent to receive text messages at my phone number</label></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Voluntary Self-Identification of Disability</legend>
+      <div><label for="eeoname">Name</label><input id="eeoname" name="eeoname" type="text"></div>
+      <div><label for="eeodate">Date</label><input id="eeodate" name="eeodate" type="text"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Gender</legend>
+      <label><input type="radio" name="g" value="m"> Male</label>
+      <label><input type="radio" name="g" value="f"> Female</label>
+      <label><input type="radio" name="g" value="d"> Decline to self-identify</label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Work authorization</legend>
+      <label><input type="radio" name="wa" value="y"> Yes</label>
+      <label><input type="radio" name="wa" value="n"> No</label>
+    </fieldset>
+
+    <div>
+      <span>Select one</span>
+      <select id="race" name="race_sel">
+        <option value="">Select…</option>
+        <option value="1">Hispanic or Latino</option>
+        <option value="2">American Indian or Alaska Native</option>
+        <option value="3">I do not wish to answer</option>
+      </select>
+    </div>
+
+    <div><label for="ec">Emergency Contact First Name</label><input id="ec" name="ec" type="text"></div>
+
+    <div><label for="free">Tell us about a project you are proud of</label><textarea id="free" name="free"></textarea></div>
+
+    <button type="submit" id="go">Submit</button>
+  </form>
+  <script>
+    window.__submitted = false;
+    document.getElementById('f').addEventListener('submit', function (e) { e.preventDefault(); window.__submitted = true; });
+  </script>
+</body>
+</html>

@@ -75,6 +75,7 @@ CRITICAL RULES:
 4. Sound human and genuine, not like a template.
 5. Tailor the answer to the specific role and company.
 6. If the profile has no relevant information for the question, return confidence: 0.3 and a brief honest answer.
+7. NEVER answer questions about work authorization, visa or sponsorship, citizenship or immigration status, criminal history, disability, veteran status, race, ethnicity, gender, age, or any other legal or equal-opportunity matter. For those return an empty answer with confidence: 0.
 
 You MUST respond with valid JSON matching this exact schema:
 {
@@ -163,7 +164,7 @@ Write a concise, honest, tailored answer.`;
 
     return {
       answer:     parsed.answer.trim(),
-      confidence: clamp01(parsed.confidence || 0.7),
+      confidence: clamp01(parsed.confidence ?? 0),
       evidence:   parsed.evidence || [],
     };
   }

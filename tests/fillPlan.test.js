@@ -92,3 +92,24 @@ test('determineAction maps field kinds to executor actions', () => {
   assert.equal(determineAction({ tag: 'textarea', type: 'textarea' }), 'fill');
   assert.equal(determineAction({ tag: 'input', type: 'email' }), 'fill');
 });
+
+test('checkboxes are never ticked from a profile value (a phone number must not tick an SMS-consent box)', async () => {
+  const d = field({ label: 'I consent to receive text messages at my phone number', tag: 'input', type: 'checkbox' });
+  const [entry] = await plan([d]);
+  assert.equal(entry.action, 'skip');
+  assert.match(entry.skipReason, /tick it yourself/i);
+});
+
+test('a meaning whose profile value is an object (resume) is never typed into a field', async () => {
+  const d = field({ label: 'Attachment name', _knownMeaning: 'resume' });
+  const [entry] = await plan([d]);
+  assert.equal(entry.action, 'skip');
+  assert.match(entry.skipReason, /No value in profile/);
+});
+
+test('every radio of a group under a protected heading is skipped as protected', async () => {
+  const d = field({ label: 'Male', type: 'radio', tag: 'input', sectionHeading: 'Gender', options: [{ value: 'm', label: 'Male' }, { value: 'f', label: 'Female' }] });
+  const [entry] = await plan([d]);
+  assert.equal(entry.action, 'skip');
+  assert.equal(entry.meaning, 'protected');
+});

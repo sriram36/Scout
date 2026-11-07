@@ -78,6 +78,24 @@ async function buildFillPlan(descriptors, { platform = 'unknown', useLLM = true,
     const desc  = safeDescriptors[i];
     const match = matches[i];
 
+    // Never tick or untick a checkbox from a profile value (consent boxes, "I agree" boxes):
+    // there is no boolean in the profile to base it on, and a phone number is not a "yes".
+    if (desc.type === 'checkbox') {
+      plan.push({
+        elementId:  desc.elementId,
+        selector:   desc.selector,
+        descriptor: desc,
+        meaning:    match.meaning,
+        value:      null,
+        confidence: match.confidence,
+        stage:      match.stage,
+        action:     'skip',
+        skipReason: 'Checkbox — tick it yourself',
+        isAIGenerated: false,
+      });
+      continue;
+    }
+
     // A pre-generated AI answer for a free-text question. (Safety-blocked fields never get
     // here.) Weak or empty answers are left for the candidate rather than guessed.
     const aiEntry = aiAnswerMap.get(desc.elementId);
@@ -150,7 +168,8 @@ async function buildFillPlan(descriptors, { platform = 'unknown', useLLM = true,
 
     // Resolve the value from the profile
     const value = resolveValue(match.meaning);
-    if (!value) {
+    // A profile value must be plain text or a number: objects (such as the resume entry) are never typed in.
+    if (value === null || value === undefined || value === '' || typeof value === 'object') {
       plan.push({
         elementId:  desc.elementId,
         selector:   desc.selector,

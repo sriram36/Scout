@@ -76,3 +76,18 @@ test('generateAnswer falls back to empty result on empty, non-JSON or throwing t
   assert.deepEqual(await createOperations(fakeTransport(() => { throw new Error('x'); })).generateAnswer(ANSWER_PARAMS), EMPTY);
   assert.deepEqual(await createOperations(fakeTransport(() => JSON.stringify({ answer: 5 }))).generateAnswer(ANSWER_PARAMS), EMPTY);
 });
+
+test('generateAnswer: an omitted or zero confidence stays 0 and is never defaulted upward', async () => {
+  const omitted = createOperations(fakeTransport(() => JSON.stringify({ answer: 'Yes, I am eligible.' })));
+  assert.equal((await omitted.generateAnswer(ANSWER_PARAMS)).confidence, 0);
+  const zero = createOperations(fakeTransport(() => JSON.stringify({ answer: 'Yes', confidence: 0 })));
+  assert.equal((await zero.generateAnswer(ANSWER_PARAMS)).confidence, 0);
+});
+
+test('the answer prompt tells the model to refuse legal and EEO questions', async () => {
+  const t = fakeTransport(() => JSON.stringify({ answer: '', confidence: 0 }));
+  await createOperations(t).generateAnswer(ANSWER_PARAMS);
+  const system = t.calls[0].messages[0].content;
+  assert.match(system, /work authori[sz]ation|visa|sponsorship/i);
+  assert.match(system, /confidence: 0/);
+});
