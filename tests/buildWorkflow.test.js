@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { buildWorkflow } = require('../n8n/build-workflow');
+const { buildWorkflow, prepareSource } = require('../n8n/build-workflow');
 
 const FILE = path.join(__dirname, '..', 'n8n', 'scout-job-discovery.json');
 const NORMALIZE_SRC = fs.readFileSync(path.join(__dirname, '..', 'n8n', 'normalize.js'), 'utf8');
@@ -96,4 +96,13 @@ test('fetch nodes run once and always emit an item so an empty response cannot h
     assert.equal(node(name).executeOnce, true, `${name} executeOnce`);
     assert.equal(node(name).alwaysOutputData, true, `${name} alwaysOutputData`);
   }
+});
+
+test('the embedded source is the same whatever line endings the checkout used (Windows autocrlf)', () => {
+  const lf = 'const a = 1;\nfunction normalize() {}\nmodule.exports = { normalize };\n';
+  const crlf = lf.replace(/\n/g, '\r\n');
+  assert.equal(prepareSource(crlf), prepareSource(lf));
+  assert.ok(!prepareSource(crlf).includes('\r'));
+  assert.ok(!prepareSource(crlf).includes('module.exports'));
+  assert.ok(prepareSource(crlf).includes('function normalize()'));
 });

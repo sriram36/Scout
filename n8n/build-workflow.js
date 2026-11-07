@@ -12,10 +12,15 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const OUTPUT = path.join(__dirname, 'scout-job-discovery.json');
-const NORMALIZE_SOURCE = fs
-  .readFileSync(path.join(__dirname, 'normalize.js'), 'utf8')
-  .replace(/^module\.exports\s*=.*$/m, '')
-  .trim();
+/**
+ * The text embedded in the n8n Code node: normalize.js without its export line, with LF line
+ * endings. Git on Windows may check the file out with CRLF; the generated JSON must not depend on that.
+ */
+function prepareSource(text) {
+  return text.replace(/\r\n/g, '\n').replace(/^module\.exports\s*=.*$/m, '').trim();
+}
+
+const NORMALIZE_SOURCE = prepareSource(fs.readFileSync(path.join(__dirname, 'normalize.js'), 'utf8'));
 
 const GLUE = `
 // ── n8n glue: read the three fetch nodes and emit one item holding all rows ──
@@ -146,4 +151,4 @@ if (require.main === module) {
   console.log(`Wrote ${path.relative(process.cwd(), OUTPUT)}`);
 }
 
-module.exports = { buildWorkflow };
+module.exports = { buildWorkflow, prepareSource };
