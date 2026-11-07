@@ -10,12 +10,13 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-function useTestProfile() {
+/** @param {object} overrides  top-level profile keys to replace, e.g. { experience: [...] } */
+function useTestProfile(overrides = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'scout-test-'));
   const resumePath = path.join(dir, 'Test_Candidate_Resume.pdf');
   fs.writeFileSync(resumePath, '%PDF-1.4\n% scout test resume\n');
 
-  const profile = {
+  const base = {
     personal: {
       firstName: 'Test',
       lastName: 'Candidate',
@@ -41,6 +42,7 @@ function useTestProfile() {
     preferences: { preferredRoles: ['Software Engineer'] },
     resume: { defaultPath: resumePath },
   };
+  const profile = { ...base, ...overrides };
 
   const profilePath = path.join(dir, 'profile.json');
   fs.writeFileSync(profilePath, JSON.stringify(profile, null, 2));

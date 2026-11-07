@@ -36,11 +36,18 @@ test('a note with no report (sign-in wall) stores zero counts and the note alone
   assert.equal(update.fields_filled, 0);
 });
 
-test('no report and no note stores a null report with zero counts', () => {
-  const update = buildApplicationUpdate({ report: null }, 'generic');
-  assert.equal(update.status, 'autofill_completed');
-  assert.equal(update.fill_report, null);
-  assert.equal(update.fields_skipped, 0);
+test('a run that found no fields asks the candidate to continue by hand instead of claiming success', () => {
+  for (const result of [{ report: null }, { report: { ...REPORT, total: 0, filled: 0, skipped: 0 } }]) {
+    const update = buildApplicationUpdate(result, 'generic');
+    assert.equal(update.status, 'awaiting_review');
+    assert.match(update.fill_report.note, /no form fields/i);
+    assert.equal(update.fields_filled, 0);
+  }
+});
+
+test('an adapter note is kept in preference to the no-fields note', () => {
+  const update = buildApplicationUpdate({ report: null, note: 'Sign in first' }, 'workday');
+  assert.equal(update.fill_report.note, 'Sign in first');
 });
 
 test('the report object passed in is not mutated', () => {

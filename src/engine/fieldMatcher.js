@@ -116,6 +116,8 @@ function resolveValue(meaning) {
     if (first && last) return `${first} ${last}`;
     return first || last || null;
   }
+  if (meaning === 'experience.current.company') return resolvePath('experience.0.company');
+  if (meaning === 'experience.current.role')    return resolvePath('experience.0.role');
   return resolvePath(meaning);
 }
 

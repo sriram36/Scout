@@ -38,7 +38,8 @@ function describeEntry(entry) {
   return {
     field:     entry.elementId,
     label:     fieldLabel(entry.descriptor, entry.elementId),
-    signature: fieldSignature(entry.descriptor),
+    // protected fields get no signature: a learned mapping could never apply to them
+    signature: entry.meaning === 'protected' ? '' : fieldSignature(entry.descriptor),
     meaning:   entry.meaning,
   };
 }

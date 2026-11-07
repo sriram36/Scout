@@ -100,8 +100,9 @@ app.post('/apply', validateBody(applyBodySchema), async (req, res) => {
     // Run the fill pipeline
     const result = await adapter.fill(page, job, { useLLM: true, generateAnswers: true });
 
+    const update = buildApplicationUpdate(result, atsName);
     if (jobId) {
-      await updateApplication(jobId, buildApplicationUpdate(result, atsName));
+      await updateApplication(jobId, update);
     }
 
     log.info('Autofill complete — awaiting human review', {
@@ -127,8 +128,8 @@ app.post('/apply', validateBody(applyBodySchema), async (req, res) => {
       errors:   result.errors,
       report:   result.report,
       screenshot,
-      status: result.note || !isHeadless ? 'awaiting_review' : 'autofill_completed',
-      note: result.note || (isHeadless
+      status: update.status === 'awaiting_review' || !isHeadless ? 'awaiting_review' : 'autofill_completed',
+      note: update.fill_report?.note || (isHeadless
         ? 'Application drafted in cloud browser.'
         : 'Browser is open — please review all fields, then submit manually.'),
     });

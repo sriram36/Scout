@@ -55,3 +55,10 @@ test('matcher honours _knownMeaning set by an adapter (stage 1, high confidence)
   const unknown = await matchField({ label: 'Zzz unrecognisable' }, { useLLM: false });
   assert.equal(unknown.meaning, 'unknown');
 });
+
+test('a protected field is reported without a signature, so nothing can be "taught" for it', () => {
+  const entry = { elementId: 'el-g', meaning: 'protected', descriptor: { name: 'gender', id: 'g', label: 'Gender' } };
+  const described = describeEntry(entry);
+  assert.equal(described.signature, '');
+  assert.equal(described.label, 'Gender');
+});

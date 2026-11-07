@@ -57,10 +57,11 @@ test('GET /meanings lists the field meanings a correction may use, without "unkn
   assert.equal(res.status, 200);
   const { meanings } = await res.json();
   assert.ok(Array.isArray(meanings));
-  for (const m of ['personal.email', 'links.github', 'education.university', 'resume']) {
+  for (const m of ['personal.email', 'links.github', 'education.university', 'experience.current.company']) {
     assert.ok(meanings.includes(m), `missing ${m}`);
   }
   assert.ok(!meanings.includes('unknown'));
+  assert.ok(!meanings.includes('resume'), 'a resume is a file upload, not text a correction can supply');
 }));
 
 test('POST /corrections rejects invalid bodies with issue paths and stores nothing', () => withServer({}, async (base, calls) => {

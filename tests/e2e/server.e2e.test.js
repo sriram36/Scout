@@ -28,6 +28,7 @@ async function startServer(port) {
     NEXT_PUBLIC_SUPABASE_URL: '', NEXT_PUBLIC_SUPABASE_ANON_KEY: '', SUPABASE_SERVICE_ROLE_KEY: '',
     AZURE_OPENAI_ENDPOINT: '', AZURE_OPENAI_KEY: '', AZURE_OPENAI_DEPLOYMENT: '',
     LLM_PROVIDER: '', LLM_API_KEY: '', LLM_BASE_URL: '', LLM_MODEL: '',
+    DASHBOARD_ORIGIN: '', HOST: '', PROFILE_JSON: '',
   };
   const child = spawn(process.execPath, ['server.js'], { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';

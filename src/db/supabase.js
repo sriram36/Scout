@@ -61,7 +61,7 @@ async function updateApplication(id, updates) {
  */
 async function upsertFieldMapping({ platform, domain, fieldSignature, meaning, confidence = 1.0 }) {
   const supabase = getSupabase();
-  if (!supabase) return;
+  if (!supabase) throw new Error('Supabase is not configured — the correction was not saved');
 
   const { error } = await supabase
     .from('field_mappings')
@@ -70,7 +70,10 @@ async function upsertFieldMapping({ platform, domain, fieldSignature, meaning, c
       { onConflict: 'platform,field_signature', ignoreDuplicates: false }
     );
 
-  if (error) log.warn('Failed to upsert field mapping', { fieldSignature, error: error.message });
+  if (error) {
+    log.warn('Failed to upsert field mapping', { fieldSignature, error: error.message });
+    throw new Error(error.message);
+  }
 }
 
 /**
