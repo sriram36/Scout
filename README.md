@@ -20,8 +20,8 @@ Scout is a personal job-application copilot. It finds new developer jobs, lets y
 
 - **Discovery** — an n8n workflow pulls remote developer jobs from Himalayas, Arbeitnow and RemoteOK, de-duplicates them (tracking parameters and trailing slashes are ignored), and stores them in Supabase.
 - **Dashboard** — a Next.js app showing listings and live application status.
-- **Autofill** — a Playwright bot detects the ATS (Greenhouse, Lever, Ashby; others use a generic adapter), reads the form, and fills what it can. Free-text questions get a short answer written by an LLM from your profile only.
-- **Safety** — demographic/EEOC, work-authorization and similar sensitive fields are never touched. Low-confidence fields are skipped and listed in the fill report. Scout never clicks Submit.
+- **Autofill** — a Playwright bot detects the ATS (Greenhouse, Lever, Ashby, Workday, iCIMS, SmartRecruiters; anything else uses a generic adapter), reads the form, and fills what it can. Free-text questions get a short answer written by an LLM from your profile only; weak answers are left blank.
+- **Safety** — never touched, whatever a rule or the model says: demographic/EEOC fields, legal-status questions (work authorization, visa sponsorship, citizenship, criminal record, security clearance), passwords, CAPTCHAs and tracking fields. Low-confidence fields are skipped and listed in the fill report. Scout never clicks Submit; on multi-step forms it only clicks a plain *Continue/Next* button.
 
 ## Prerequisites
 
@@ -60,6 +60,18 @@ Scout is a personal job-application copilot. It finds new developer jobs, lets y
    ```
    Open `http://localhost:5678`, create the owner account, open the **Scout Job Discovery** workflow (already imported), run it once with *Test workflow*, then **Publish** it (older n8n versions call this *Active*) so it runs every 6 hours. Listings appear in the dashboard.
 7. **Apply.** Click *Apply* on a job. The apply server picks it up, opens the form, fills it, and leaves the browser open for you.
+
+## Supported platforms
+
+| Platform | How it is handled | Verified |
+|---|---|---|
+| Greenhouse, Lever, Ashby | dedicated adapters with the platform's own field ids | fixture forms in real Chromium |
+| Workday | multi-step wizard: fills each step, advances with *Save and Continue*, stops before *Submit*; leaves sign-in walls to you | fixture wizard |
+| iCIMS | fills the application inside its iframe | fixture page |
+| SmartRecruiters | reads forms built from web components (open shadow DOM) | fixture page |
+| Anything else | generic adapter (labels, names, types) | fixture form |
+
+The adapters are written from each platform's public markup conventions and exercised against fixture pages that mimic them. **They have not been verified against live company sites**, so expect to review every filled form (you always do — Scout never submits). Workday and similar tenants require an account; Scout does not handle credentials, so sign in in the open browser and queue the job again.
 
 ## Environment variables
 
@@ -108,7 +120,7 @@ With no provider configured Scout still works: fields are matched by rules only 
 ## Development
 
 ```bash
-npm test                      # unit tests (node:test)
+npm test                      # unit tests plus real-browser end-to-end tests (node:test; needs Chromium: npx playwright install chromium)
 bash scripts/verify-schema.sh    # applies the schema to a throwaway Postgres container and checks the access rules (needs Docker)
 bash scripts/verify-postgrest.sh # runs the real PostgREST API over that schema and checks the requests Scout makes (needs Docker)
 node n8n/build-workflow.js    # regenerate n8n/scout-job-discovery.json after editing n8n/normalize.js
@@ -128,7 +140,7 @@ node n8n/build-workflow.js    # regenerate n8n/scout-job-discovery.json after ed
 
 ```
 server.js            Express server: /apply, /profile, /health, /corrections, queue start-up
-src/adapters/        Greenhouse, Lever, Ashby and generic form adapters
+src/adapters/        shared pipeline + Greenhouse, Lever, Ashby, Workday, iCIMS, SmartRecruiters and generic adapters
 src/engine/          field extraction, matching, safety filter, fill plan, Playwright executor
 src/llm/             provider-agnostic LLM operations (Azure + OpenAI-compatible)
 src/queue/           locked application queue (Realtime + fallback poll)
