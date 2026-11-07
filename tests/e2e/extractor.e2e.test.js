@@ -45,3 +45,17 @@ test('fields inside open shadow roots are found, labelled and filled', async (t)
   assert.equal(result.report.filled, 4);
   assert.equal(await page.evaluate(() => window.__submitted), false);
 });
+
+test('duplicate ids (wrapper + input, and the same id in several shadow roots) never send a value to the wrong element', async (t) => {
+  const page = await withPage('dupes.html', t);
+  const result = await generic.fill(page, JOB, NO_LLM);
+
+  assert.equal(await page.inputValue('input[name=first_name]'), 'Test', 'wrapper div and input share an id');
+  assert.equal(await page.inputValue('#em'), 'test.candidate@example.com');
+  const inRoot = (host) => page.evaluate((h) => document.getElementById(h).shadowRoot.querySelector('input').value, host);
+  assert.equal(await inRoot('c1'), 'https://linkedin.com/in/test-candidate');
+  assert.equal(await inRoot('c2'), 'https://github.com/test-candidate');
+  assert.equal(await inRoot('c3'), 'https://test-candidate.dev');
+  assert.equal(result.report.errors, 0);
+  assert.equal(result.report.filled, 5, 'first name, email and three shadow-root fields');
+});

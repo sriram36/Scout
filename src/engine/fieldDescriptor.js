@@ -25,6 +25,17 @@ const DOM_EXTRACTOR_SCRIPT = /* javascript */ `
     return out;
   }
   const elements = collect(document, []);
+
+  // How many elements in the whole page (open shadow roots included) carry each id and name.
+  // An id or name shared with another element (a wrapper div, another component) is not a
+  // safe handle: the locator would resolve to the wrong element.
+  const idCounts = Object.create(null);
+  const nameCounts = Object.create(null);
+  (function countAll(root) {
+    root.querySelectorAll('[id]').forEach(function (e) { if (e.id) idCounts[e.id] = (idCounts[e.id] || 0) + 1; });
+    root.querySelectorAll('[name]').forEach(function (e) { const n = e.getAttribute('name'); if (n) nameCounts[n] = (nameCounts[n] || 0) + 1; });
+    root.querySelectorAll('*').forEach(function (e) { if (e.shadowRoot) countAll(e.shadowRoot); });
+  })(document);
   // Forget tags from a previous extraction (multi-step forms re-extract on every step).
   elements.forEach(function (el) { el.removeAttribute('data-scout-field'); });
 
@@ -113,8 +124,9 @@ const DOM_EXTRACTOR_SCRIPT = /* javascript */ `
 
   // Build a unique stable selector for each element (used internally, not sent to LLM)
   function buildSelector(el, index) {
-    if (el.id) return { type: 'id', value: el.id };
-    if (el.name) return { type: 'name', value: el.name };
+    if (el.id && idCounts[el.id] === 1) return { type: 'id', value: el.id };
+    // radios of one group legitimately share a name
+    if (el.name && (nameCounts[el.name] === 1 || el.type === 'radio')) return { type: 'name', value: el.name };
     // No stable handle: tag the element so the executor can find exactly this one again
     // (an index into a locator breaks as soon as any skipped input precedes it).
     const tag = 'field_' + index;

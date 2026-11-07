@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Apply — duplicate ids</title></head>
+<body>
+  <form id="f">
+    <!-- the same id on a wrapper and on the input (invalid HTML, common in templates) -->
+    <div id="first_name" class="field">
+      <label for="first_name">First Name</label>
+      <input id="first_name" name="first_name" type="text">
+    </div>
+    <div><label for="em">Email</label><input id="em" name="em" type="email"></div>
+
+    <!-- three web components that each reuse id="input" inside their own shadow root -->
+    <div id="c1"></div><div id="c2"></div><div id="c3"></div>
+  </form>
+  <script>
+    function mount(host, label) {
+      document.getElementById(host).attachShadow({ mode: 'open' }).innerHTML =
+        '<div><label for="input">' + label + '</label><input id="input" type="text"></div>';
+    }
+    mount('c1', 'LinkedIn URL');
+    mount('c2', 'GitHub URL');
+    mount('c3', 'Portfolio URL');
+  </script>
+</body>
+</html>
