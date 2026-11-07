@@ -50,7 +50,11 @@ const fetchNode = (id, name, url, position, extra = {}) => ({
   type: 'n8n-nodes-base.httpRequest',
   typeVersion: 4.2,
   position,
+  // Run once and always emit an item: an empty response must not halt the chain, and
+  // one dead source must not stop the others from being saved.
   onError: 'continueRegularOutput',
+  executeOnce: true,
+  alwaysOutputData: true,
   parameters: { method: 'GET', url, options: { timeout: 20000 }, ...extra },
 });
 

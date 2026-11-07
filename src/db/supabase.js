@@ -133,6 +133,31 @@ async function claimApplication(id) {
   return (data?.length ?? 0) > 0;
 }
 
+/**
+ * Mark applications left in an active state by a crashed/killed server as failed,
+ * so the dashboard offers Retry instead of showing "Processing…" forever.
+ * @returns {Promise<number>} how many rows were changed
+ */
+async function markInterruptedApplications() {
+  const supabase = getSupabase();
+  if (!supabase) return 0;
+
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('applications')
+    .update({
+      status: 'failed',
+      error_message: 'Interrupted (apply server restarted)',
+      completed_at: now,
+      status_updated_at: now,
+    })
+    .in('status', ['applying', 'application_opened', 'form_analyzed'])
+    .select('id');
+
+  if (error) throw new Error(error.message);
+  return data?.length ?? 0;
+}
+
 async function markApplicationFailed(id, message) {
   await updateApplication(id, {
     status: 'failed',
@@ -173,5 +198,6 @@ module.exports = {
   fetchPendingApplication,
   claimApplication,
   markApplicationFailed,
+  markInterruptedApplications,
   subscribePendingApplications,
 };

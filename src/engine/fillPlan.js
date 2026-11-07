@@ -197,9 +197,13 @@ function buildReport(fillPlan, executionResults) {
       semantic:     fillPlan.filter(p => p.stage === 2 && p.action !== 'skip').length,
       llm:          fillPlan.filter(p => p.stage === 3 && p.action !== 'skip').length,
     },
-    filled:   executionResults.filled,
-    skipped:  executionResults.skipped,
-    errors:   executionResults.errors,
+    // Per-field detail lives under `details`; the top-level counts above must stay
+    // numeric (they feed INTEGER columns and the dashboard's report modal).
+    details: {
+      filled:  executionResults.filled,
+      skipped: executionResults.skipped,
+      errors:  executionResults.errors,
+    },
   };
 }
 

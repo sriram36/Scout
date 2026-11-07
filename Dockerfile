@@ -13,6 +13,8 @@ COPY . .
 
 # Environment settings
 ENV PORT=3001
+# Inside a container the server must listen on all interfaces so the published port works.
+ENV HOST=0.0.0.0
 ENV HEADLESS=true
 ENV NODE_ENV=production
 

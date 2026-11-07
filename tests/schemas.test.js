@@ -72,3 +72,8 @@ test('validateBody treats a missing body as an empty object', () => {
   validateBody(applyBodySchema)(req, res, () => {});
   assert.equal(res.statusCode, 400);
 });
+
+test('apply: jobId must be a uuid (application ids are uuids)', () => {
+  assert.equal(applyBodySchema.safeParse({ url: 'https://a.com', jobId: 'abc' }).success, false);
+  assert.equal(applyBodySchema.safeParse({ url: 'https://a.com', jobId: '3f2b8c1e-9d4a-4e6b-8a57-1c2d3e4f5a6b' }).success, true);
+});

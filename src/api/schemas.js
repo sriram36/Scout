@@ -17,7 +17,7 @@ const httpUrl = z.string().refine((value) => {
 
 const applyBodySchema = z.object({
   url:         httpUrl,
-  jobId:       z.string().min(1).optional(),
+  jobId:       z.string().uuid().optional(),
   title:       z.string().default(''),
   company:     z.string().default(''),
   description: z.string().default(''),

@@ -73,6 +73,20 @@ function createQueue({ store, runApply, log = require('../logger'), intervalMs =
     return running;
   }
 
+  /**
+   * A crash or kill mid-run leaves an application in an active state forever.
+   * Single-instance assumption: anything active at start-up is an interrupted run.
+   */
+  async function recover() {
+    if (typeof store.recoverInterrupted !== 'function') return;
+    try {
+      const count = await store.recoverInterrupted();
+      if (count > 0) log.warn('Marked interrupted applications as failed', { count });
+    } catch (e) {
+      log.warn('Could not recover interrupted applications', { error: e.message });
+    }
+  }
+
   function start() {
     try {
       unsubscribe = store.subscribe(() => { trigger(); });
@@ -81,7 +95,7 @@ function createQueue({ store, runApply, log = require('../logger'), intervalMs =
       log.warn('Realtime unavailable — relying on the fallback poll', { error: e.message });
     }
     timer = setInterval(() => { trigger(); }, intervalMs);
-    trigger();
+    recover().then(() => trigger());
   }
 
   function stop() {

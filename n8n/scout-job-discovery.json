@@ -44,6 +44,8 @@
         100
       ],
       "onError": "continueRegularOutput",
+      "executeOnce": true,
+      "alwaysOutputData": true,
       "parameters": {
         "method": "GET",
         "url": "https://himalayas.app/jobs/api?category=developer",
@@ -62,6 +64,8 @@
         100
       ],
       "onError": "continueRegularOutput",
+      "executeOnce": true,
+      "alwaysOutputData": true,
       "parameters": {
         "method": "GET",
         "url": "https://www.arbeitnow.com/api/job-board-api",
@@ -80,6 +84,8 @@
         100
       ],
       "onError": "continueRegularOutput",
+      "executeOnce": true,
+      "alwaysOutputData": true,
       "parameters": {
         "method": "GET",
         "url": "https://remoteok.com/api",

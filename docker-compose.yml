@@ -17,11 +17,20 @@ x-n8n-env: &n8n-env
   SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
 
 services:
-  # One-shot: loads n8n/scout-job-discovery.json (fixed id, so re-runs update it in place).
+  # One-shot: loads n8n/scout-job-discovery.json the first time only. Importing again would
+  # overwrite edits made in the n8n UI and can switch the workflow off, so it is skipped when
+  # the workflow already exists. To deliberately replace it with the file on disk:
+  #   docker compose run --rm --entrypoint n8n n8n-import import:workflow --input=/workflows/scout-job-discovery.json
   n8n-import:
     image: docker.n8n.io/n8nio/n8n:2.46.6
     restart: "no"
-    command: ["import:workflow", "--input=/workflows/scout-job-discovery.json"]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        if n8n list:workflow | grep -q '^scout-job-discovery|';
+        then echo 'Scout workflow already imported - leaving it untouched';
+        else n8n import:workflow --input=/workflows/scout-job-discovery.json;
+        fi
     environment: *n8n-env
     volumes:
       - n8n_data:/home/node/.n8n
@@ -31,7 +40,7 @@ services:
     image: docker.n8n.io/n8nio/n8n:2.46.6
     restart: unless-stopped
     ports:
-      - "5678:5678"
+      - "127.0.0.1:5678:5678"
     environment: *n8n-env
     volumes:
       - n8n_data:/home/node/.n8n

@@ -58,7 +58,7 @@ Scout is a personal job-application copilot. It finds new developer jobs, lets y
    ```bash
    docker compose up -d
    ```
-   Open `http://localhost:5678`, create the owner account, open the **Scout Job Discovery** workflow (already imported), run it once with *Test workflow*, then switch it to **Active**. Listings appear in the dashboard.
+   Open `http://localhost:5678`, create the owner account, open the **Scout Job Discovery** workflow (already imported), run it once with *Test workflow*, then **Publish** it (older n8n versions call this *Active*) so it runs every 6 hours. Listings appear in the dashboard.
 7. **Apply.** Click *Apply* on a job. The apply server picks it up, opens the form, fills it, and leaves the browser open for you.
 
 ## Environment variables
@@ -74,6 +74,8 @@ Scout is a personal job-application copilot. It finds new developer jobs, lets y
 | `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY`, `AZURE_OPENAI_DEPLOYMENT` | server | Azure OpenAI provider |
 | `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL` | server | OpenAI-compatible provider |
 | `PORT` | server | Apply server port (default `3001`) |
+| `HOST` | server | Address to bind (default `127.0.0.1`, loopback only; the Docker image sets `0.0.0.0`) |
+| `DASHBOARD_ORIGIN` | server | Browser origin(s) allowed to call the server, comma-separated (default `http://localhost:3000`, `http://127.0.0.1:3000`) |
 | `HEADLESS` | server | `false` shows the browser (needed for review); defaults to headless on Linux/cloud |
 | `LOG_LEVEL` | server | `debug`, `info`, `warn`, `error` |
 | `PROFILE_JSON` | server | Profile as one-line JSON, used if `profile.json` is missing |
@@ -100,13 +102,15 @@ With no provider configured Scout still works: fields are matched by rules only 
 
 - The dashboard's anon key can read everything and can only queue, reset or mark-submitted an application, and only through the three status columns. It cannot write listings or forge pipeline states. The rules are in the schema file.
 - `fill_report` is readable with the anon key because the dashboard shows it. Keep your Supabase URL private; it is a personal project, not a multi-user product.
+- The apply server listens on loopback only and accepts browser calls only from the dashboard origin, so other websites and other machines cannot make it fill forms with your details. n8n is likewise published on `127.0.0.1` only.
 - `.env` and `profile.json` are git-ignored. Never commit them.
 
 ## Development
 
 ```bash
 npm test                      # unit tests (node:test)
-bash scripts/verify-schema.sh # applies the schema to a throwaway Postgres container and checks the access rules (needs Docker)
+bash scripts/verify-schema.sh    # applies the schema to a throwaway Postgres container and checks the access rules (needs Docker)
+bash scripts/verify-postgrest.sh # runs the real PostgREST API over that schema and checks the requests Scout makes (needs Docker)
 node n8n/build-workflow.js    # regenerate n8n/scout-job-discovery.json after editing n8n/normalize.js
 ```
 
@@ -115,6 +119,7 @@ node n8n/build-workflow.js    # regenerate n8n/scout-job-discovery.json after ed
 - **Dashboard says the apply server is offline** — run `npm start` and check `NEXT_PUBLIC_LOCAL_API`.
 - **Clicking Apply does nothing** — the server needs `SUPABASE_SERVICE_ROLE_KEY`; with only the anon key its writes are rejected. The server log says which key it is using.
 - **No listings** — run the n8n workflow once manually and check its execution log; confirm `SUPABASE_SERVICE_ROLE_KEY` is set in `.env` before `docker compose up`.
+- **I edited the workflow file and n8n did not pick it up** — the import only runs the first time, so edits made in the n8n UI are never overwritten. To replace the workflow with the file on disk: `docker compose run --rm --entrypoint n8n n8n-import import:workflow --input=/workflows/scout-job-discovery.json`, then publish it again.
 - **n8n refuses to start** — `N8N_ENCRYPTION_KEY` is missing from `.env`. Do not change it afterwards or n8n cannot read its saved credentials.
 - **The browser closes immediately** — `HEADLESS` is `true` (or the server runs on Linux). Set `HEADLESS=false`.
 - **Some listings open an aggregator page, not the company's form** — Himalayas links to its own listing page. Click through to the employer's apply link, or apply manually.

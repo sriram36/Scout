@@ -90,3 +90,10 @@ test('Code node returns [] when there is nothing to save (Save node then does no
 test('the JSON file on disk is exactly what build-workflow generates', () => {
   assert.deepEqual(buildWorkflow(), workflow);
 });
+
+test('fetch nodes run once and always emit an item so an empty response cannot halt the chain', () => {
+  for (const name of ['Fetch Himalayas Jobs', 'Fetch Arbeitnow Jobs', 'Fetch RemoteOK Jobs']) {
+    assert.equal(node(name).executeOnce, true, `${name} executeOnce`);
+    assert.equal(node(name).alwaysOutputData, true, `${name} alwaysOutputData`);
+  }
+});

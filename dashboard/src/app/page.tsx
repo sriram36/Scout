@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import type { JSX } from "react";
+import { pickApplication } from "../lib/pickApplication";
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -266,7 +267,7 @@ export default function Dashboard() {
       if (error) throw error;
 
       const formatted: Job[] = (data || []).map((job: any) => {
-        const app = job.applications?.[0] || null;
+        const app = pickApplication(job.applications);
         return {
           id:       job.id,
           title:    job.title || "Unknown Role",
@@ -309,15 +310,16 @@ export default function Dashboard() {
     setStatusMsgs(prev => ({ ...prev, [job.id]: "" }));
     try {
       const app = job.application;
-      if (app?.id) {
-        await supabase.from("applications").update({ status: "pending_application", status_updated_at: new Date().toISOString() }).eq("id", app.id);
-      } else {
-        await supabase.from("applications").insert({ listing_id: job.id, status: "pending_application", status_updated_at: new Date().toISOString() });
-      }
+      const queuedAt = new Date().toISOString();
+      // supabase-js returns { error } instead of throwing, so check it explicitly.
+      const { error } = app?.id
+        ? await supabase.from("applications").update({ status: "pending_application", status_updated_at: queuedAt }).eq("id", app.id)
+        : await supabase.from("applications").insert({ listing_id: job.id, status: "pending_application", status_updated_at: queuedAt });
+      if (error) throw error;
       setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: "pending_application" } : j));
       setStatusMsgs(prev => ({ ...prev, [job.id]: "Queued!" }));
     } catch (err) {
-      setStatusMsgs(prev => ({ ...prev, [job.id]: err instanceof Error ? err.message : "Error" }));
+      setStatusMsgs(prev => ({ ...prev, [job.id]: (err as { message?: string })?.message || "Error" }));
     } finally {
       setLoadingId(null);
       setTimeout(() => setStatusMsgs(prev => { const n = { ...prev }; delete n[job.id]; return n; }), 4000);
@@ -327,7 +329,14 @@ export default function Dashboard() {
   const retryJob = async (job: Job) => {
     setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: "Discovered" } : j));
     if (job.application?.id) {
-      await supabase.from("applications").update({ status: "Discovered", error_message: null }).eq("id", job.application.id);
+      const { error } = await supabase
+        .from("applications")
+        .update({ status: "Discovered", error_message: null, status_updated_at: new Date().toISOString() })
+        .eq("id", job.application.id);
+      if (error) {
+        console.warn("Could not reset application:", error.message);
+        fetchJobs(true); // undo the optimistic update
+      }
     }
   };
 

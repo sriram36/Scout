@@ -26,8 +26,10 @@ const {
   fetchPendingApplication,
   claimApplication,
   markApplicationFailed,
+  markInterruptedApplications,
   subscribePendingApplications,
 } = require('./src/db/supabase');
+const { createCorsOptions, resolveHost } = require('./src/api/access');
 const { detectATS, getAdapter }          = require('./src/adapters/index');
 const { applyBodySchema, correctionBodySchema, validateBody } = require('./src/api/schemas');
 const { captureScreenshotDataUrl }       = require('./src/engine/screenshot');
@@ -48,7 +50,7 @@ log.info('Scout application server starting', { port: PORT, headless: isHeadless
 // ─── Express setup ────────────────────────────────────────────────────────────
 
 const app = express();
-app.use(cors());
+app.use(cors(createCorsOptions()));
 app.use(express.json());
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
@@ -241,6 +243,7 @@ const queue = createQueue({
     claim:        claimApplication,
     markFailed:   markApplicationFailed,
     subscribe:    subscribePendingApplications,
+    recoverInterrupted: markInterruptedApplications,
   },
   runApply: runQueuedApplication,
   log,
@@ -248,8 +251,10 @@ const queue = createQueue({
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 
-app.listen(PORT, () => {
-  log.info(`Scout apply-service ready on port ${PORT}`);
+const HOST = resolveHost();
+
+app.listen(PORT, HOST, () => {
+  log.info(`Scout apply-service ready on ${HOST}:${PORT}`);
   log.info('Endpoints: POST /apply, GET /profile, GET /health, POST /corrections');
 
   if (getSupabase()) {

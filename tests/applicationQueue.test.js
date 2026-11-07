@@ -129,3 +129,31 @@ test('start survives a throwing subscribe and keeps polling (realtime unavailabl
   assert.equal(store.calls.fetch, afterStart + 1, 'poll still fires');
   q.stop();
 });
+
+test('start recovers interrupted applications once, before the first pass', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const order = [];
+  const store = scriptedStore([]);
+  const realFetch = store.fetchPending;
+  store.fetchPending = async () => { order.push('fetch'); return realFetch(); };
+  store.recoverInterrupted = async () => { order.push('recover'); return 2; };
+  const q = createQueue({ store, runApply: async () => {}, log: silent });
+  q.start();
+  await tick();
+  t.mock.timers.tick(30000);
+  await tick();
+  assert.deepEqual(order.slice(0, 2), ['recover', 'fetch']);
+  assert.equal(order.filter(x => x === 'recover').length, 1);
+  q.stop();
+});
+
+test('a failing recoverInterrupted does not stop the queue from starting', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const store = scriptedStore([]);
+  store.recoverInterrupted = async () => { throw new Error('db down'); };
+  const q = createQueue({ store, runApply: async () => {}, log: silent });
+  assert.doesNotThrow(() => q.start());
+  await tick();
+  assert.ok(store.calls.fetch >= 1);
+  q.stop();
+});
