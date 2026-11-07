@@ -96,3 +96,38 @@ test('the server answers the dashboard origin only', async (t) => {
   const ok = await fetch(`${server.base}/health`, { headers: { Origin: 'http://localhost:3000' } });
   assert.equal(ok.headers.get('access-control-allow-origin'), 'http://localhost:3000');
 });
+
+test('POST /apply on a job-board page follows its Apply link and fills the real form behind it', async (t) => {
+  const fixtures = await serveFixtures();
+  const server = await startServer(await freePort());
+  t.after(async () => { await stop(server.child); await fixtures.close(); });
+
+  const res = await fetch(`${server.base}/apply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: `${fixtures.base}/agg-link.html`, title: 'Backend Engineer', company: 'Acme' }),
+  });
+  assert.equal(res.status, 200, await res.clone().text());
+  const body = await res.json();
+  assert.equal(body.platform, 'greenhouse', 'detected on the page the Apply link led to, not on the job board');
+  assert.equal(body.report.filled, 6);
+  assert.equal(body.status, 'autofill_completed');
+});
+
+test('POST /apply on a job-board page with no Apply link reports that it is not a form and types nothing', async (t) => {
+  const fixtures = await serveFixtures();
+  const server = await startServer(await freePort());
+  t.after(async () => { await stop(server.child); await fixtures.close(); });
+
+  const res = await fetch(`${server.base}/apply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: `${fixtures.base}/newsletter.html`, title: 'Sales Engineer', company: 'Acme' }),
+  });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.report, null);
+  assert.deepEqual(body.filled, []);
+  assert.equal(body.status, 'awaiting_review');
+  assert.match(body.note, /does not look like an application form/i);
+});

@@ -22,6 +22,18 @@ const log = require('../logger');
 
 const RESUME_FIELD = /resume|cv/i;
 
+const IDENTITY_MEANINGS = new Set(['personal.firstName', 'personal.lastName', 'personal.fullName']);
+const NOT_AN_APPLICATION_NOTE = 'This page does not look like an application form (no name or resume field, only boxes such as a search, location or job-alert field), so Scout typed nothing. Open the apply link in the browser and continue by hand.';
+
+const hasResumeInput = (descriptors) => descriptors.some(d =>
+  d.type === 'file' && RESUME_FIELD.test(`${d.name || ''} ${d.id || ''} ${d.label || ''}`));
+
+/** An application asks who you are (a name) or for a resume; a newsletter, search or location box does not. */
+function looksLikeApplication(plan, descriptors) {
+  return hasResumeInput(descriptors) ||
+    plan.some(p => p.action !== 'skip' && (p.action === 'upload' || IDENTITY_MEANINGS.has(p.meaning)));
+}
+
 /** Add upload entries for resume file inputs that the plan has not already handled. */
 function addResumeUploads(plan, descriptors, resumePath) {
   if (!resumePath) return plan;
@@ -57,7 +69,7 @@ function addResumeUploads(plan, descriptors, resumePath) {
  * @returns {Promise<{filled: object[], skipped: object[], errors: object[], report: object|null}>}
  */
 async function runPipeline(target, job = {}, { useLLM = true, generateAnswers = true } = {}, spec) {
-  const { platform, waitFor, annotate } = spec;
+  const { platform, waitFor, annotate, requireIdentity = false } = spec;
   const profile = getProfile();
 
   if (waitFor) {
@@ -79,6 +91,13 @@ async function runPipeline(target, job = {}, { useLLM = true, generateAnswers = 
 
   const matchCache = new Map();   // the plan is built twice when AI answers exist; classify each field once
   let plan = await buildFillPlan(descriptors, { platform, useLLM, matchCache });
+
+  // Unknown pages (job boards) have search, location and newsletter boxes that look fillable. Never type
+  // into them, and never ask the model about them: decide this before any AI call.
+  if (requireIdentity && !looksLikeApplication(plan, descriptors)) {
+    log.info(`[${platform}] Not an application form — leaving it alone`);
+    return { filled: [], skipped: [], errors: [], report: null, note: NOT_AN_APPLICATION_NOTE };
+  }
 
   if (generateAnswers && job.title) {
     const aiAnswers = await generateAnswersForPlan(descriptors, plan, job);

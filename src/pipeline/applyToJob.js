@@ -12,6 +12,7 @@
 
 const { buildApplicationUpdate } = require('../api/applicationUpdate');
 const { captureScreenshotDataUrl } = require('../engine/screenshot');
+const { followApplyLink: defaultFollowApplyLink } = require('../adapters/followApply');
 
 /**
  * @param {{
@@ -23,7 +24,7 @@ const { captureScreenshotDataUrl } = require('../engine/screenshot');
  *   log: { info: Function, error: Function },
  * }} deps
  */
-function createApplier({ launchBrowser, detectATS, getAdapter, updateApplication, isHeadless, log }) {
+function createApplier({ launchBrowser, detectATS, getAdapter, updateApplication, isHeadless, log, followApplyLink = defaultFollowApplyLink }) {
   /**
    * @param {{url: string, jobId?: string, title?: string, company?: string, description?: string}} input
    * @returns {Promise<object>} the response body: platform, filled, skipped, errors, report, screenshot, status, note
@@ -44,13 +45,17 @@ function createApplier({ launchBrowser, detectATS, getAdapter, updateApplication
 
       await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
 
-      const atsName = await detectATS(url, page);
+      // A job-board listing is not the form: follow its Apply control to the employer's page first.
+      const { page: formPage, hops } = await followApplyLink(page);
+      if (hops > 0) log.info('Continuing on the page the Apply control led to', { hops });
+
+      const atsName = await detectATS(formPage.url(), formPage);
       const adapter = getAdapter(atsName);
       log.info('ATS detected', { ats: atsName });
 
       if (jobId) await updateApplication(jobId, { status: 'form_analyzed', ats_platform: atsName });
 
-      const result = await adapter.fill(page, job, { useLLM: true, generateAnswers: true });
+      const result = await adapter.fill(formPage, job, { useLLM: true, generateAnswers: true });
 
       const update = buildApplicationUpdate(result, atsName);
       if (jobId) await updateApplication(jobId, update);
@@ -65,7 +70,7 @@ function createApplier({ launchBrowser, detectATS, getAdapter, updateApplication
       // Headless: take a screenshot and close. Headed: keep the browser open for the human review.
       let screenshot = null;
       if (isHeadless) {
-        screenshot = await captureScreenshotDataUrl(page);
+        screenshot = await captureScreenshotDataUrl(formPage);
         await browser.close();
         browser = null;
       }

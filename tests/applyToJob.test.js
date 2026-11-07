@@ -12,11 +12,13 @@ function harness({ headless = true, fillResult, launchError, fillError } = {}) {
   const page = {
     setDefaultTimeout: async () => {},
     goto: async () => {},
+    url: () => JOB.url,
     screenshot: async () => Buffer.from('png-bytes'),
   };
   const browser = { newPage: async () => page, close: async () => { calls.closed++; } };
   const apply = createApplier({
     launchBrowser: async () => { calls.launched++; if (launchError) throw launchError; return browser; },
+    followApplyLink: async (p) => ({ page: p, hops: 0 }),   // these tests use a fake page with no DOM
     detectATS: async () => 'greenhouse',
     getAdapter: () => ({ fill: async () => { if (fillError) throw fillError; return fillResult; } }),
     updateApplication: async (id, update) => { calls.updates.push({ id, update }); },
@@ -81,4 +83,26 @@ test('a browser that cannot start is a failure, not a crash', async () => {
   const { apply, calls } = harness({ launchError: new Error('no chromium') });
   await assert.rejects(apply(JOB), /no chromium/);
   assert.equal(calls.updates.at(-1).update.status, 'failed');
+});
+
+test('the form the Apply control leads to is what gets detected and filled', async () => {
+  const calls = { detected: null, filledPage: null };
+  const listingPage = { setDefaultTimeout: async () => {}, goto: async () => {}, url: () => 'https://board.example/job/1' };
+  const formPage = { url: () => 'https://boards.greenhouse.io/acme/jobs/1', screenshot: async () => Buffer.from('png') };
+  const browser = { newPage: async () => listingPage, close: async () => {} };
+  const apply = createApplier({
+    launchBrowser: async () => browser,
+    followApplyLink: async (page) => ({ page: formPage, hops: 1 }),
+    detectATS: async (url, page) => { calls.detected = { url, page }; return 'greenhouse'; },
+    getAdapter: () => ({ fill: async (page) => { calls.filledPage = page; return GOOD; } }),
+    updateApplication: async () => {},
+    isHeadless: true,
+    log: silent,
+  });
+  const out = await apply(JOB);
+  assert.equal(calls.detected.url, 'https://boards.greenhouse.io/acme/jobs/1');
+  assert.equal(calls.detected.page, formPage);
+  assert.equal(calls.filledPage, formPage);
+  assert.equal(out.platform, 'greenhouse');
+  assert.match(out.screenshot, /^data:image\/png;base64,/, 'the screenshot is of the form, not the job board');
 });
