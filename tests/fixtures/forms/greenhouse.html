@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Jobs at Acme — Greenhouse</title></head>
+<body>
+  <div id="main">
+    <h1>Backend Engineer</h1>
+    <form id="application_form" action="/apply" method="post">
+      <input type="hidden" name="authenticity_token" value="gh-token">
+      <div class="field">
+        <label for="first_name">First Name</label>
+        <input id="first_name" name="job_application[first_name]" type="text">
+      </div>
+      <div class="field">
+        <label for="last_name">Last Name</label>
+        <input id="last_name" name="job_application[last_name]" type="text">
+      </div>
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" name="job_application[email]" type="text">
+      </div>
+      <div class="field">
+        <label for="phone">Phone</label>
+        <input id="phone" name="job_application[phone]" type="text">
+      </div>
+      <div class="field">
+        <label for="resume">Resume/CV</label>
+        <input id="resume" name="job_application[resume]" type="file">
+      </div>
+      <div class="field">
+        <label for="question_1001">LinkedIn Profile</label>
+        <input id="question_1001" name="job_application[answers_attributes][0][text_value]" type="text">
+      </div>
+      <div class="field">
+        <label for="question_1002">Why do you want to work at Acme?</label>
+        <textarea id="question_1002" name="job_application[answers_attributes][1][text_value]"></textarea>
+      </div>
+      <div class="field">
+        <label for="question_1003">Will you now or in the future require sponsorship for employment visa status?</label>
+        <select id="question_1003" name="job_application[answers_attributes][2][boolean_value]">
+          <option value="">Please select</option>
+          <option value="1">Yes</option>
+          <option value="0">No</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="gender">Gender</label>
+        <select id="gender" name="job_application[gender]">
+          <option value="">Please select</option>
+          <option value="1">Male</option>
+          <option value="2">Female</option>
+          <option value="3">Decline To Self Identify</option>
+        </select>
+      </div>
+      <input type="submit" id="submit_app" value="Submit Application">
+    </form>
+  </div>
+  <script>
+    window.__submitted = false;
+    document.getElementById('application_form').addEventListener('submit', function (e) { e.preventDefault(); window.__submitted = true; });
+  </script>
+</body>
+</html>

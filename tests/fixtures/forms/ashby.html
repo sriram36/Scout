@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Acme — Ashby</title></head>
+<body>
+  <div id="root">
+    <h1>Software Engineer</h1>
+    <form data-ashby-form id="ashby-form" class="ashby-form">
+      <div>
+        <label for="_systemfield_name">Name</label>
+        <input id="_systemfield_name" name="_systemfield_name" type="text">
+      </div>
+      <div>
+        <label for="_systemfield_email">Email</label>
+        <input id="_systemfield_email" name="_systemfield_email" type="email">
+      </div>
+      <div>
+        <label for="_systemfield_resume">Resume</label>
+        <input id="_systemfield_resume" name="_systemfield_resume" type="file">
+      </div>
+      <div>
+        <label for="phone_field">Phone Number</label>
+        <input id="phone_field" name="phone_field" type="tel">
+      </div>
+      <div>
+        <label for="linkedin_field">LinkedIn</label>
+        <input id="linkedin_field" name="linkedin_field" type="text">
+      </div>
+      <div>
+        <label for="why_field">What interests you about this role?</label>
+        <textarea id="why_field" name="why_field"></textarea>
+      </div>
+      <div>
+        <label for="veteran_field">Veteran status</label>
+        <select id="veteran_field" name="veteran_field">
+          <option value="">Select…</option>
+          <option value="yes">Yes</option>
+          <option value="no">No</option>
+        </select>
+      </div>
+      <button type="submit" id="submit_btn">Submit Application</button>
+    </form>
+  </div>
+  <script>
+    window.__submitted = false;
+    document.getElementById('ashby-form').addEventListener('submit', function (e) { e.preventDefault(); window.__submitted = true; });
+  </script>
+</body>
+</html>
