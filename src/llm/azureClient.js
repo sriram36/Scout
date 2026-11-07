@@ -3,26 +3,23 @@
 /**
  * Azure OpenAI transport.
  *
- * Only knows how to talk to Azure; prompts and validation live in operations.js.
+ * Understands both endpoint styles:
+ *   classic  https://<resource>.openai.azure.com                -> /openai/deployments/<deployment>/chat/completions?api-version=...
+ *   v1       https://<resource>.openai.azure.com/openai/v1      -> /chat/completions with the deployment as `model`
+ * Prompts and validation live in operations.js; parameter quirks of newer models are handled in chatRequest.js.
  */
 
 const log = require('../logger');
+const { postChatCompletion } = require('./chatRequest');
 
 const name = 'azure';
+const API_VERSION = '2024-10-21';
 
-function getEndpoint() {
-  const base = (process.env.AZURE_OPENAI_ENDPOINT || '').replace(/\/$/, '');
-  const deployment = process.env.AZURE_OPENAI_DEPLOYMENT || 'gpt-4o';
-  const apiVersion = '2024-10-21';
-  return `${base}/openai/deployments/${deployment}/chat/completions?api-version=${apiVersion}`;
+function getBase() {
+  return (process.env.AZURE_OPENAI_ENDPOINT || '').replace(/\/+$/, '');
 }
 
-function getHeaders() {
-  return {
-    'Content-Type': 'application/json',
-    'api-key': process.env.AZURE_OPENAI_KEY || '',
-  };
-}
+const isV1 = (base) => /\/openai\/v1$/i.test(base);
 
 function isConfigured() {
   return !!(process.env.AZURE_OPENAI_ENDPOINT && process.env.AZURE_OPENAI_KEY && process.env.AZURE_OPENAI_DEPLOYMENT);
@@ -34,28 +31,23 @@ async function callAPI(messages, { maxTokens = 500, temperature = 0, jsonMode = 
     return null;
   }
 
-  const body = {
-    messages,
-    max_tokens: maxTokens,
-    temperature,
-  };
+  const base = getBase();
+  const deployment = process.env.AZURE_OPENAI_DEPLOYMENT;
+  const v1 = isV1(base);
+
+  const body = v1
+    ? { model: deployment, messages, max_completion_tokens: maxTokens, temperature }
+    : { messages, max_tokens: maxTokens, temperature };
   if (jsonMode) body.response_format = { type: 'json_object' };
 
-  const res = await fetch(getEndpoint(), {
-    method: 'POST',
-    headers: getHeaders(),
-    body: JSON.stringify(body),
+  return postChatCompletion({
+    url: v1
+      ? `${base}/chat/completions`
+      : `${base}/openai/deployments/${deployment}/chat/completions?api-version=${API_VERSION}`,
+    headers: { 'Content-Type': 'application/json', 'api-key': process.env.AZURE_OPENAI_KEY || '' },
+    body,
+    label: 'Azure OpenAI',
   });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Azure OpenAI API error ${res.status}: ${text.substring(0, 200)}`);
-  }
-
-  const data = await res.json();
-  const content = data?.choices?.[0]?.message?.content?.trim();
-  if (!content) throw new Error('Empty response from Azure OpenAI');
-  return content;
 }
 
 module.exports = { name, isConfigured, callAPI };

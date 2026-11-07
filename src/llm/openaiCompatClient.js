@@ -11,6 +11,7 @@
  */
 
 const log = require('../logger');
+const { postChatCompletion } = require('./chatRequest');
 
 const name = 'openai';
 
@@ -36,21 +37,7 @@ async function callAPI(messages, { maxTokens = 500, temperature = 0, jsonMode = 
   };
   if (jsonMode) body.response_format = { type: 'json_object' };
 
-  const res = await fetch(`${base}/chat/completions`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`LLM API error ${res.status}: ${text.substring(0, 200)}`);
-  }
-
-  const data = await res.json();
-  const content = data?.choices?.[0]?.message?.content?.trim();
-  if (!content) throw new Error('Empty response from LLM');
-  return content;
+  return postChatCompletion({ url: `${base}/chat/completions`, headers, body, label: 'LLM' });
 }
 
 module.exports = { name, isConfigured, callAPI };
