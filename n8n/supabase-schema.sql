@@ -73,11 +73,79 @@ CREATE TABLE IF NOT EXISTS field_mappings (
 
 CREATE INDEX IF NOT EXISTS idx_field_mappings_platform_sig ON field_mappings (platform, field_signature);
 
+-- ── Migrate older installs ───────────────────────────────────────────────────
+-- Tables created by hand before this schema existed lack newer columns, and CREATE TABLE IF NOT
+-- EXISTS leaves them untouched. Bring them up to date. Every statement is a no-op on a fresh install.
+
+ALTER TABLE listings ADD COLUMN IF NOT EXISTS location      TEXT DEFAULT 'Remote';
+ALTER TABLE listings ADD COLUMN IF NOT EXISTS salary        TEXT;
+ALTER TABLE listings ADD COLUMN IF NOT EXISTS description   TEXT;
+ALTER TABLE listings ADD COLUMN IF NOT EXISTS posted_date   TIMESTAMPTZ;
+ALTER TABLE listings ADD COLUMN IF NOT EXISTS discovered_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE listings ADD COLUMN IF NOT EXISTS is_internship BOOLEAN NOT NULL DEFAULT FALSE;
+-- n8n upserts on canonical_url, which needs a unique index
+CREATE UNIQUE INDEX IF NOT EXISTS listings_canonical_url_key ON listings (canonical_url);
+
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS status_updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS ats_platform          TEXT;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS started_at            TIMESTAMPTZ;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS completed_at          TIMESTAMPTZ;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS fields_detected       INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS fields_filled         INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS fields_skipped        INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS ai_questions_answered INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS fill_report           JSONB;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS error_message         TEXT;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS notes                 TEXT;
+ALTER TABLE applications ALTER COLUMN status SET DEFAULT 'Discovered';
+-- replace whatever status rule the old table had (its name is unknown) with the current one
+DO $$
+DECLARE c RECORD;
+BEGIN
+  FOR c IN
+    SELECT conname FROM pg_constraint
+    WHERE conrelid = 'public.applications'::regclass AND contype = 'c' AND pg_get_constraintdef(oid) ILIKE '%status%'
+  LOOP
+    EXECUTE format('ALTER TABLE public.applications DROP CONSTRAINT %I', c.conname);
+  END LOOP;
+END
+$$;
+-- the old status "Applied" is now "submitted" (only possible once the old rule, which rejects it, is gone)
+UPDATE applications SET status = 'submitted' WHERE status = 'Applied';
+ALTER TABLE applications ADD CONSTRAINT applications_status_check CHECK (status IN (
+  'Discovered', 'pending_application', 'applying', 'application_opened',
+  'form_analyzed', 'autofill_completed', 'awaiting_review', 'submitted', 'failed'
+)) NOT VALID;
+CREATE UNIQUE INDEX IF NOT EXISTS applications_listing_id_key ON applications (listing_id);
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.applications'::regclass AND contype = 'f') THEN
+    ALTER TABLE applications ADD CONSTRAINT applications_listing_id_fkey
+      FOREIGN KEY (listing_id) REFERENCES listings (id) ON DELETE CASCADE;
+  END IF;
+END
+$$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS field_mappings_platform_field_signature_key ON field_mappings (platform, field_signature);
+
 -- ── Row level security ──────────────────────────────────────────────────────
 
 ALTER TABLE listings       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE applications   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE field_mappings ENABLE ROW LEVEL SECURITY;
+
+-- Policies from an older install would stay in force next to the ones below (policies add up), so
+-- remove every existing policy on these tables first.
+DO $$
+DECLARE p RECORD;
+BEGIN
+  FOR p IN SELECT policyname, tablename FROM pg_policies
+           WHERE schemaname = 'public' AND tablename IN ('listings', 'applications', 'field_mappings')
+  LOOP
+    EXECUTE format('DROP POLICY %I ON public.%I', p.policyname, p.tablename);
+  END LOOP;
+END
+$$;
 
 DROP POLICY IF EXISTS listings_anon_select ON listings;
 CREATE POLICY listings_anon_select ON listings FOR SELECT TO anon USING (true);

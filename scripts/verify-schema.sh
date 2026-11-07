@@ -12,7 +12,7 @@ cleanup() { docker rm -f "$NAME" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 cleanup
 
-pg()      { docker exec -i "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q "$@"; }
+pg()      { docker exec -i "$NAME" psql -U postgres -d "${DBNAME:-postgres}" -v ON_ERROR_STOP=1 -q "$@"; }
 scalar()  { printf '%s' "$1" | pg -t -A 2>/dev/null | tr -d '[:space:]'; }
 pass()    { echo "PASS  $1"; }
 fail()    { echo "FAIL  $1"; FAILS=$((FAILS + 1)); }
@@ -82,6 +82,54 @@ expect_ok   "service_role can insert listings" service_role "INSERT INTO listing
 
 # ── realtime ─────────────────────────────────────────────────────────────────
 expect_eq   "applications is in the supabase_realtime publication" 1 "SELECT count(*) FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'applications';"
+
+# ── an OLDER install (what a hand-made Supabase project looks like) ────────────
+# Tables created before this schema existed: missing columns, an old status rule with a legacy
+# "Applied" value, a permissive old policy, and no unique index. Running the schema must migrate it.
+echo
+echo "Migrating a legacy-shaped database..."
+docker exec -i "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -c "CREATE DATABASE legacy;" >/dev/null || { echo "could not create the legacy database"; exit 1; }
+DBNAME=legacy
+pg -c "CREATE PUBLICATION supabase_realtime;" >/dev/null 2>&1
+pg >/dev/null <<'LEGACY_SQL'
+CREATE TABLE listings (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), title text NOT NULL, company text NOT NULL, location text, source text,
+  description text, apply_url text, canonical_url text, posted_date timestamptz, discovered_at timestamptz DEFAULT now(),
+  is_internship boolean DEFAULT false);
+CREATE TABLE applications (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), listing_id uuid REFERENCES listings(id),
+  status text DEFAULT 'Discovered' CHECK (status IN ('Discovered','pending_application','applying','Applied')),
+  status_updated_at timestamptz DEFAULT now(), notes text);
+ALTER TABLE listings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE applications ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "legacy anon everything" ON applications FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "legacy anon everything" ON listings FOR ALL TO anon USING (true) WITH CHECK (true);
+GRANT ALL ON applications, listings TO anon;
+INSERT INTO listings(id, title, company, source, apply_url, canonical_url) VALUES ('33333333-3333-3333-3333-333333333333','Old job','Old Co','LinkedIn','https://old.example/1','https://old.example/1');
+INSERT INTO applications(listing_id, status) VALUES ('33333333-3333-3333-3333-333333333333','Applied');
+LEGACY_SQL
+for run in 1 2; do
+  if pg < "$SCHEMA" >/dev/null 2>"/tmp/scout-legacy-$run.err"; then pass "the schema migrates the legacy database cleanly (run $run)"; else fail "the schema migrates the legacy database cleanly (run $run)"; cat "/tmp/scout-legacy-$run.err"; fi
+done
+
+COLS_APP="ats_platform started_at completed_at fields_detected fields_filled fields_skipped ai_questions_answered fill_report error_message notes status_updated_at"
+for col in $COLS_APP; do
+  expect_eq "legacy applications gained the column $col" 1 "SELECT count(*) FROM information_schema.columns WHERE table_name = 'applications' AND column_name = '$col';"
+done
+expect_eq "legacy listings gained the salary column" 1 "SELECT count(*) FROM information_schema.columns WHERE table_name = 'listings' AND column_name = 'salary';"
+expect_eq "field_mappings was created" 1 "SELECT count(*) FROM information_schema.tables WHERE table_name = 'field_mappings';"
+expect_eq "the legacy 'Applied' status became 'submitted'" submitted "SELECT status FROM applications WHERE listing_id = '33333333-3333-3333-3333-333333333333';"
+expect_ok   "the new pipeline statuses are accepted on the legacy table" postgres "UPDATE applications SET status = 'autofill_completed', fields_filled = 3, fill_report = '{}'::jsonb;"
+expect_ok   "n8n's upsert works (unique index on canonical_url exists)" service_role "INSERT INTO listings(title,company,source,apply_url,canonical_url,salary) VALUES ('t','c','s','https://old.example/1','https://old.example/1','x') ON CONFLICT (canonical_url) DO NOTHING;"
+expect_fail "a second application for one listing is rejected (unique index)" postgres "INSERT INTO applications(listing_id, status) VALUES ('33333333-3333-3333-3333-333333333333','pending_application');"
+printf "SET ROLE anon; UPDATE applications SET status = 'autofill_completed';" | pg >/dev/null 2>&1
+pg -c "UPDATE applications SET status = 'failed';" >/dev/null 2>&1
+printf "SET ROLE anon; UPDATE applications SET status = 'autofill_completed', status_updated_at = now();" | pg >/dev/null 2>&1
+expect_eq   "the old permissive policy is gone: the browser key cannot forge autofill_completed" failed "SELECT status FROM applications;"
+expect_fail "the browser key cannot write the fill report on a migrated table" anon "UPDATE applications SET fill_report = '{}'::jsonb;"
+expect_fail "the browser key cannot create listings on a migrated table" anon "INSERT INTO listings(title,company,source,apply_url,canonical_url) VALUES ('x','y','z','https://x.com','https://x.com');"
+expect_eq   "only this schema's policies remain on applications" 3 "SELECT count(*) FROM pg_policies WHERE schemaname = 'public' AND tablename = 'applications';"
+DBNAME=postgres
 
 echo
 if [ "$FAILS" -eq 0 ]; then echo "All schema checks passed."; else echo "$FAILS schema check(s) FAILED."; exit 1; fi
