@@ -7,7 +7,7 @@
  * Responsibilities:
  *  - Serve the /apply endpoint (triggers browser automation)
  *  - Serve the /profile endpoint (for dashboard display)
- *  - Poll Supabase for pending applications
+ *  - Pick up pending applications from Supabase (Realtime + fallback poll)
  *
  * This file is intentionally thin. All business logic lives in src/.
  */
@@ -19,8 +19,19 @@ const cors       = require('cors');
 const { chromium } = require('playwright');
 const log        = require('./src/logger');
 const { getProfile } = require('./src/config/profile');
-const { getSupabase, updateApplication } = require('./src/db/supabase');
+const {
+  getSupabase,
+  updateApplication,
+  upsertFieldMapping,
+  fetchPendingApplication,
+  claimApplication,
+  markApplicationFailed,
+  subscribePendingApplications,
+} = require('./src/db/supabase');
 const { detectATS, getAdapter }          = require('./src/adapters/index');
+const { applyBodySchema, correctionBodySchema, validateBody } = require('./src/api/schemas');
+const { captureScreenshotDataUrl }       = require('./src/engine/screenshot');
+const { createQueue }                    = require('./src/queue/applicationQueue');
 
 // ─── Startup ──────────────────────────────────────────────────────────────────
 
@@ -74,13 +85,12 @@ app.get('/health', (req, res) => {
  * Launches Playwright, detects ATS, runs the fill pipeline,
  * and returns the fill report. Does NOT auto-submit.
  */
-app.post('/apply', async (req, res) => {
+app.post('/apply', validateBody(applyBodySchema), async (req, res) => {
   let browser = null;
   const startedAt = new Date().toISOString();
 
   try {
-    const { url, jobId, title = '', company = '', description = '' } = req.body;
-    if (!url) return res.status(400).json({ error: 'Missing job URL' });
+    const { url, jobId, title, company, description } = req.body;
 
     const job = { id: jobId, title, company, description, apply_url: url };
 
@@ -129,9 +139,9 @@ app.post('/apply', async (req, res) => {
     });
 
     // In headless mode, take a screenshot and close
-    let screenshotBase64 = null;
+    let screenshot = null;
     if (isHeadless) {
-      screenshotBase64 = await page.screenshot({ fullPage: true, encoding: 'base64' });
+      screenshot = await captureScreenshotDataUrl(page);
       await browser.close();
       browser = null;
     }
@@ -143,7 +153,7 @@ app.post('/apply', async (req, res) => {
       skipped:  result.skipped,
       errors:   result.errors,
       report:   result.report,
-      screenshot: screenshotBase64 ? `data:image/png;base64,${screenshotBase64}` : null,
+      screenshot,
       status: isHeadless ? 'autofill_completed' : 'awaiting_review',
       note: isHeadless
         ? 'Application drafted in cloud browser.'
@@ -175,12 +185,10 @@ app.post('/apply', async (req, res) => {
  * Body: { platform, fieldSignature, meaning, confidence }
  * Records a user correction for the learning system.
  */
-app.post('/corrections', async (req, res) => {
+app.post('/corrections', validateBody(correctionBodySchema), async (req, res) => {
   try {
-    const { platform, domain, fieldSignature, meaning, confidence = 1.0 } = req.body;
-    if (!fieldSignature || !meaning) return res.status(400).json({ error: 'Missing fieldSignature or meaning' });
+    const { platform, domain, fieldSignature, meaning, confidence } = req.body;
 
-    const { upsertFieldMapping } = require('./src/db/supabase');
     await upsertFieldMapping({ platform, domain, fieldSignature, meaning, confidence });
     log.info('Field mapping correction recorded', { platform, fieldSignature, meaning });
     res.json({ success: true });
@@ -197,71 +205,57 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: err.message || 'Internal Server Error' });
 });
 
-// ─── Supabase polling ─────────────────────────────────────────────────────────
+// ─── Application queue (Supabase Realtime + fallback poll) ────────────────────
 
-const supabase = getSupabase();
-if (supabase) {
-  log.info('Supabase polling enabled — checking for pending applications every 8 seconds');
+/**
+ * Run one queued application by calling this server's own /apply route.
+ * Throws on failure so the queue can mark the application failed.
+ */
+async function runQueuedApplication(appRecord) {
+  const job = appRecord.listings;
 
-  setInterval(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('applications')
-        .select('*, listings!inner(*)')
-        .eq('status', 'pending_application')
-        .limit(1);
+  const resp = await fetch(`http://localhost:${PORT}/apply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      url:         job.apply_url || job.canonical_url,
+      jobId:       appRecord.id,
+      title:       job.title,
+      company:     job.company,
+      description: job.description || '',
+    }),
+  });
 
-      if (error || !data || data.length === 0) return;
+  const result = await resp.json().catch(() => ({}));
+  if (!resp.ok || result.error) {
+    throw new Error(result.error || `Apply request failed (${resp.status})`);
+  }
 
-      const appRecord = data[0];
-      const job = appRecord.listings;
-      log.info('Picked up pending application', { jobId: job.id, title: job.title });
-
-      await supabase
-        .from('applications')
-        .update({ status: 'applying', status_updated_at: new Date().toISOString() })
-        .eq('id', appRecord.id);
-
-      const applyUrl = job.apply_url || job.canonical_url;
-
-      try {
-        const resp = await fetch(`http://localhost:${PORT}/apply`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            url:         applyUrl,
-            jobId:       appRecord.id,
-            title:       job.title,
-            company:     job.company,
-            description: job.description || '',
-          }),
-        });
-
-        const result = await resp.json();
-
-        if (result.error) throw new Error(result.error);
-
-        // Status updated inside /apply route — just log here
-        log.info('Application autofill complete — awaiting human review', { jobId: job.id });
-
-      } catch (err) {
-        log.error('Application pipeline failed', { jobId: job.id, error: err.message });
-        await updateApplication(appRecord.id, {
-          status: 'failed',
-          error_message: err.message,
-          completed_at: new Date().toISOString(),
-        });
-      }
-
-    } catch (e) {
-      // Ignore transient network errors during polling
-    }
-  }, 8000);
+  // Status is updated inside /apply — just log here
+  log.info('Application autofill complete — awaiting human review', { id: appRecord.id });
 }
+
+const queue = createQueue({
+  store: {
+    fetchPending: fetchPendingApplication,
+    claim:        claimApplication,
+    markFailed:   markApplicationFailed,
+    subscribe:    subscribePendingApplications,
+  },
+  runApply: runQueuedApplication,
+  log,
+});
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
   log.info(`Scout apply-service ready on port ${PORT}`);
   log.info('Endpoints: POST /apply, GET /profile, GET /health, POST /corrections');
+
+  if (getSupabase()) {
+    queue.start();
+    log.info('Application queue started — Realtime pickup with a 30s fallback poll');
+  } else {
+    log.warn('Supabase not configured — queued applications will not be picked up');
+  }
 });

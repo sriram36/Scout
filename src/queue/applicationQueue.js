@@ -74,7 +74,12 @@ function createQueue({ store, runApply, log = require('../logger'), intervalMs =
   }
 
   function start() {
-    unsubscribe = store.subscribe(() => { trigger(); });
+    try {
+      unsubscribe = store.subscribe(() => { trigger(); });
+    } catch (e) {
+      // e.g. Node < 22 has no native WebSocket; the fallback poll still picks work up.
+      log.warn('Realtime unavailable — relying on the fallback poll', { error: e.message });
+    }
     timer = setInterval(() => { trigger(); }, intervalMs);
     trigger();
   }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import type { JSX } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -50,7 +51,6 @@ const STATUS_LABELS: Record<string, string> = {
   awaiting_review:      "Review",
   submitted:            "Applied ✓",
   failed:               "Error",
-  Applied:              "Applied ✓",
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -62,7 +62,6 @@ const STATUS_COLORS: Record<string, string> = {
   autofill_completed:  "status-success",
   awaiting_review:     "status-review",
   submitted:           "status-applied",
-  Applied:             "status-applied",
   failed:              "status-error",
 };
 
@@ -343,7 +342,7 @@ export default function Dashboard() {
   const counts = {
     total:   jobs.length,
     new:     jobs.filter(j => j.status === "Discovered").length,
-    applied: jobs.filter(j => ["Applied", "submitted", "autofill_completed", "awaiting_review"].includes(j.status)).length,
+    applied: jobs.filter(j => ["submitted", "autofill_completed", "awaiting_review"].includes(j.status)).length,
     failed:  jobs.filter(j => j.status === "failed").length,
   };
 

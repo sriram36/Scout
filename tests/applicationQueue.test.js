@@ -115,3 +115,17 @@ test('stop unsubscribes and the interval no longer fires', async (t) => {
   assert.equal(store.calls.fetch, before);
   assert.equal(store.calls.unsubscribed, 1);
 });
+
+test('start survives a throwing subscribe and keeps polling (realtime unavailable)', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const store = scriptedStore([]);
+  store.subscribe = () => { throw new Error('WebSocket not available'); };
+  const q = createQueue({ store, runApply: async () => {}, log: silent });
+  assert.doesNotThrow(() => q.start());
+  await tick();
+  const afterStart = store.calls.fetch;
+  t.mock.timers.tick(30000);
+  await tick();
+  assert.equal(store.calls.fetch, afterStart + 1, 'poll still fires');
+  q.stop();
+});
