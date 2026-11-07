@@ -2,6 +2,8 @@
 
 Scout is a personal job-application copilot. It finds new developer jobs, lets you queue the ones you like from a dashboard, and then drives a real browser to fill in the application form for you — **and stops before submitting, so you review everything and press Submit yourself.**
 
+![Scout pipeline board](docs/screenshots/dashboard-dark.png)
+
 ```
  n8n (Docker)            Supabase                 Dashboard (Next.js)
  every 6 hours           listings / applications  browse jobs, click Apply
@@ -19,7 +21,7 @@ Scout is a personal job-application copilot. It finds new developer jobs, lets y
 ## What it does
 
 - **Discovery** — an n8n workflow pulls remote developer jobs from Himalayas, Arbeitnow and RemoteOK, de-duplicates them (tracking parameters and trailing slashes are ignored), and stores them in Supabase.
-- **Dashboard** — a Next.js app showing listings and live application status.
+- **Dashboard** — a Next.js app with a pipeline board (Discovered → Queued → Filling → Review → Applied), live stats, a details drawer with the full fill report, and a *Teach Scout* control for fields it skipped. Dark and light themes, a command menu (`Ctrl K`), and a demo mode (`http://localhost:3000/?demo=1`) that runs on sample data with no backend. See [`dashboard/README.md`](dashboard/README.md).
 - **Autofill** — a Playwright bot detects the ATS (Greenhouse, Lever, Ashby, Workday, iCIMS, SmartRecruiters; anything else uses a generic adapter), reads the form, and fills what it can. Free-text questions get a short answer written by an LLM from your profile only; weak answers are left blank.
 - **Safety** — never touched, whatever a rule or the model says: demographic/EEOC fields, legal-status questions (work authorization, visa sponsorship, citizenship, criminal record, security clearance), passwords, CAPTCHAs and tracking fields. Low-confidence fields are skipped and listed in the fill report. Scout never clicks Submit; on multi-step forms it only clicks a plain *Continue/Next* button.
 
@@ -59,7 +61,7 @@ Scout is a personal job-application copilot. It finds new developer jobs, lets y
    docker compose up -d
    ```
    Open `http://localhost:5678`, create the owner account, open the **Scout Job Discovery** workflow (already imported), run it once with *Test workflow*, then **Publish** it (older n8n versions call this *Active*) so it runs every 6 hours. Listings appear in the dashboard.
-7. **Apply.** Click *Apply* on a job. The apply server picks it up, opens the form, fills it, and leaves the browser open for you.
+7. **Apply.** Click *Auto-fill* on a job. The apply server picks it up, opens the form, fills it, and leaves the browser open for you.
 
 ## Supported platforms
 
