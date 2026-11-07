@@ -1,10 +1,10 @@
 import type { Metadata, Viewport } from "next";
-import { Bricolage_Grotesque, Instrument_Sans } from "next/font/google";
 import { THEME_BOOT_SCRIPT } from "@/lib/themeScript";
 import "./globals.css";
 
-const display = Bricolage_Grotesque({ variable: "--font-display", subsets: ["latin"], weight: ["500", "600", "700"] });
-const text = Instrument_Sans({ variable: "--font-text", subsets: ["latin"] });
+// Fonts are self-hosted (public/fonts, declared in globals.css): next/font/google could not be
+// resolved by Vercel's build.
+const PRELOADED_FONTS = ["/fonts/instrument-sans-latin.woff2", "/fonts/bricolage-grotesque-latin.woff2"];
 
 export const metadata: Metadata = {
   title: "Scout: job application pipeline",
@@ -20,8 +20,11 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" data-theme="dark" className={`${display.variable} ${text.variable}`} suppressHydrationWarning>
+    <html lang="en" data-theme="dark" suppressHydrationWarning>
       <head>
+        {PRELOADED_FONTS.map(href => (
+          <link key={href} rel="preload" href={href} as="font" type="font/woff2" crossOrigin="anonymous" />
+        ))}
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
       </head>
       <body>{children}</body>
