@@ -10,13 +10,18 @@
     <div id="error" data-automation-id="errorMessage" hidden>Please fix the errors below.</div>
   </div>
   <script>
-    const blocked = new URLSearchParams(location.search).get('blocked') === '1';
+    const params = new URLSearchParams(location.search);
+    const blocked = params.get('blocked') === '1';
+    // lag=ms: the step body changes at once but the button label follows later, so for a
+    // moment the Review step still shows the previous step's "Save and Continue" label.
+    const lag = Number(params.get('lag') || 0);
     const steps = [
       { title: 'My Information', html: `
         <label for="fn">First Name</label><input id="fn" name="legalName--firstName" type="text">
         <label for="ln">Last Name</label><input id="ln" name="legalName--lastName" type="text">
         <label for="em">Email</label><input id="em" name="email" type="email">
-        <label for="ph">Phone Number</label><input id="ph" name="phoneNumber" type="tel">` },
+        <label for="ph">Phone Number</label><input id="ph" name="phoneNumber" type="tel">
+        <label for="ecfn">Emergency Contact First Name</label><input id="ecfn" name="emergencyContact--firstName" type="text">` },
       { title: 'My Experience', html: `
         <label for="school">School or University</label><input id="school" name="school" type="text">
         <label for="li">LinkedIn</label><input id="li" name="linkedin" type="text">
@@ -44,11 +49,15 @@
       });
       window.__snapshots.push(values);
     }
+    let rendered = false;
     function render() {
       const s = steps[index];
       document.getElementById('title').textContent = s.title;
       document.getElementById('step').innerHTML = s.html;
-      document.getElementById('next').textContent = s.final ? 'Submit' : 'Save and Continue';
+      const label = s.final ? 'Submit' : 'Save and Continue';
+      if (lag && rendered) setTimeout(function () { document.getElementById('next').textContent = label; }, lag);
+      else document.getElementById('next').textContent = label;
+      rendered = true;
       document.getElementById('error').hidden = true;
       window.__step = s.title;
     }

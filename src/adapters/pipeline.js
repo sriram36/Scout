@@ -136,4 +136,11 @@ function mergeResults(results) {
   };
 }
 
-module.exports = { runPipeline, addResumeUploads, mergeResults };
+/** A visible password field means a sign-in wall: Scout never handles credentials. */
+async function isSignInWall(target) {
+  return (await target.locator('input[type="password"]:visible').count()) > 0;
+}
+
+const SIGN_IN_NOTE = "This site needs you to sign in or create an account first, and Scout can't do that for you. Continue in the open browser.";
+
+module.exports = { runPipeline, addResumeUploads, mergeResults, isSignInWall, SIGN_IN_NOTE };
