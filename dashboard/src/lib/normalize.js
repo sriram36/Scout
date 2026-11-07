@@ -110,4 +110,19 @@ function applyRealtimeChange(jobs, payload) {
   });
 }
 
-module.exports = { normalizeListing, normalizeReport, applyRealtimeChange };
+/**
+ * Add listings that sit outside the loaded page (an older listing whose application is in progress) so they
+ * are never hidden by paging. Page copies win; the result is in discovery order, undated listings last.
+ * @param {Job[]} page
+ * @param {Job[]} extra
+ * @returns {Job[]}
+ */
+function mergeListings(page, extra) {
+  const seen = new Set(page.map(j => j.id));
+  const added = extra.filter(j => !seen.has(j.id));
+  if (!added.length) return page;
+  const time = (j) => { const t = Date.parse(j.discoveredAt || ''); return Number.isFinite(t) ? t : -Infinity; };
+  return [...page, ...added].sort((a, b) => time(b) - time(a));
+}
+
+module.exports = { normalizeListing, normalizeReport, applyRealtimeChange, mergeListings };

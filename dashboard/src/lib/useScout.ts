@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { resolveMode } from "./mode";
-import { normalizeListing, applyRealtimeChange } from "./normalize";
+import { normalizeListing, applyRealtimeChange, mergeListings } from "./normalize";
 import { planStatusChange, type StatusChange } from "./pipeline";
 import { buildDemoListings, nextDemoStatus, smallReport, DEMO_PROFILE } from "./demoData";
 import { FALLBACK_MEANINGS, buildCorrectionPayload } from "./corrections";
@@ -60,6 +60,9 @@ export function useScout() {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const jobsRef = useRef<Job[]>([]);
+  // How many listings came from paging. Listings pulled in because they have an application are not part
+  // of the paging window, so they must not shift the offset for "Load more".
+  const pagedCount = useRef(0);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const toastId = useRef(0);
 
@@ -105,7 +108,7 @@ export function useScout() {
 
     // The initial state is already "loading"; only later loads need to announce themselves.
     if (kind !== "initial") setLoadState(kind === "refresh" ? "refreshing" : "more");
-    const loaded = jobsRef.current.length;
+    const loaded = pagedCount.current;
     const from = kind === "more" ? loaded : 0;
     const to = kind === "more" ? loaded + PAGE_SIZE - 1 : Math.max(loaded, PAGE_SIZE) - 1;
     try {
@@ -116,10 +119,26 @@ export function useScout() {
         .range(from, to);
       if (error) throw new Error(error.message);
       const page = (data ?? []).map(normalizeListing);
+      pagedCount.current = kind === "more" ? loaded + page.length : page.length;
+
+      // A listing with an application must always be on the board, however old it is.
+      let withApplications: Job[] = [];
+      try {
+        const applied = await sb
+          .from("listings")
+          .select(LISTING_SELECT)
+          .not("applications", "is", null)
+          .order("discovered_at", { ascending: false })
+          .limit(200);
+        if (!applied.error) withApplications = (applied.data ?? []).map(normalizeListing).filter(j => j.application);
+      } catch { /* the board still works from the page alone */ }
+
       setJobs(prev => {
-        if (kind !== "more") return page;
-        const seen = new Set(prev.map(j => j.id));
-        return [...prev, ...page.filter(j => !seen.has(j.id))];
+        const base = kind !== "more" ? page : (() => {
+          const seen = new Set(prev.map(j => j.id));
+          return [...prev, ...page.filter(j => !seen.has(j.id))];
+        })();
+        return mergeListings(base, withApplications);
       });
       setHasMore(page.length === to - from + 1);
       setLoadError(null);

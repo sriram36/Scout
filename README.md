@@ -139,7 +139,7 @@ node n8n/build-workflow.js    # regenerate n8n/scout-job-discovery.json after ed
 - **n8n refuses to start** — `N8N_ENCRYPTION_KEY` is missing from `.env`. Do not change it afterwards or n8n cannot read its saved credentials.
 - **The browser closes immediately** — `HEADLESS` is `true` (or the server runs on Linux). Set `HEADLESS=false`.
 - **An application says "Scout found no form fields"** — the apply link opens the job posting (or an "Apply" choice page), not the form. Open it in the browser Scout leaves open, click through to the form and fill it by hand.
-- **Some listings open an aggregator page, not the company's form** — Himalayas links to its own listing page. Click through to the employer's apply link, or apply manually.
+- **Some listings open a job-board page, not the company's form** — Scout follows a plain *Apply* link or button (up to two hops) and, if the page it lands on has no name or resume field, types nothing and tells you so. It cannot get through bot protection: Adzuna and Himalayas show a verification wall to automated browsers, and RemoteOK's Apply link bounces back to its own page. For those, use the apply link yourself. Arbeitnow links often reach the employer's form.
 
 ## Layout
 

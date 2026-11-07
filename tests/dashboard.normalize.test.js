@@ -90,3 +90,29 @@ test('normalizeReport carries the adapter note and accepts a note-only report', 
   assert.equal(normalizeReport({ total: 1, note: 42 }).note, null);
   assert.equal(normalizeReport({ total: 1 }).note, null);
 });
+
+// ── applications must stay visible even when their listing is older than the first page ──
+const { mergeListings } = require('../dashboard/src/lib/normalize');
+const job = (id, discoveredAt, extra = {}) => ({ id, discoveredAt, status: 'Discovered', application: null, ...extra });
+
+test('mergeListings adds a listing that is outside the page, in discovery order', () => {
+  const page = [job('new', '2026-11-06'), job('mid', '2026-11-03')];
+  const old = job('old', '2026-09-01', { status: 'awaiting_review', application: { id: 'A' } });
+  assert.deepEqual(mergeListings(page, [old]).map(j => j.id), ['new', 'mid', 'old']);
+});
+
+test('mergeListings never duplicates a listing that is in both, and keeps the page copy', () => {
+  const page = [job('a', '2026-11-06', { status: 'submitted' })];
+  const merged = mergeListings(page, [job('a', '2026-11-06', { status: 'stale' })]);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].status, 'submitted');
+});
+
+test('mergeListings puts listings with no discovery date last and does not mutate its inputs', () => {
+  const page = [job('a', '2026-11-06')];
+  const extra = [job('undated', null), job('b', '2026-10-01')];
+  const out = mergeListings(page, extra);
+  assert.deepEqual(out.map(j => j.id), ['a', 'b', 'undated']);
+  assert.deepEqual(page.map(j => j.id), ['a']);
+  assert.deepEqual(extra.map(j => j.id), ['undated', 'b']);
+});
