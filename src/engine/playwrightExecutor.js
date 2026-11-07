@@ -17,6 +17,7 @@
 
 const fs  = require('fs');
 const { describeEntry } = require('./fieldIdentity');
+const { chooseOption } = require('./optionMatcher');
 const log = require('../logger').child
   ? require('../logger').child({ component: 'Executor' })
   : require('../logger');
@@ -98,56 +99,28 @@ async function fillText(locator, value) {
 }
 
 async function selectOption(locator, value, options = []) {
-  // Try matching by value first, then by label text
   const valueStr = String(value);
 
-  // Direct value match
-  try {
-    await locator.first().selectOption({ value: valueStr });
-    return true;
-  } catch (_) {}
-
-  // Label match (case-insensitive, normalized)
+  // Options known from extraction: choose one here and select it by a value that exists.
+  // (A blind selectOption on a value that is not there waits out the whole page timeout.)
   if (options.length > 0) {
-    const normalize = s => s.toLowerCase().replace(/[.\-_]/g, ' ').trim();
-    const normValue = normalize(valueStr);
-
-    const byLabel = options.find(o => normalize(o.label) === normValue);
-    if (byLabel) {
-      await locator.first().selectOption({ value: byLabel.value });
+    const chosen = chooseOption(valueStr, options);
+    if (chosen) {
+      await locator.first().selectOption({ value: chosen.value });
       return true;
     }
-
-    // Partial/contains match
-    const partial = options.find(o => normalize(o.label).includes(normValue) || normValue.includes(normalize(o.label)));
-    if (partial) {
-      await locator.first().selectOption({ value: partial.value });
-      return true;
-    }
-
-    // Degree equivalence mappings (B.Tech → Bachelor's Degree etc.)
-    const degreeMap = {
-      'btech': ["bachelor", "b.tech", "be", "b.e"],
-      'mtech': ["master", "m.tech", "me", "m.e"],
-      'bsc':   ["bachelor", "b.sc", "bsc"],
-      'msc':   ["master", "m.sc", "msc"],
-      'phd':   ["phd", "ph.d", "doctor"],
-      'mba':   ["mba", "master of business"],
-    };
-    const normLower = normValue.replace(/\s+/g, '');
-    for (const [key, aliases] of Object.entries(degreeMap)) {
-      if (aliases.some(a => normLower.includes(a.replace(/\s+/g, '')))) {
-        const match = options.find(o => aliases.some(a => normalize(o.label).includes(a.replace(/[.\-]/g, ''))));
-        if (match) {
-          await locator.first().selectOption({ value: match.value });
-          return true;
-        }
-      }
-    }
+    log.warn('Could not match select option', { value: valueStr, availableOptions: options.map(o => o.label) });
+    return false;
   }
 
-  log.warn('Could not match select option', { value: valueStr, availableOptions: options.map(o => o.label) });
-  return false;
+  // Options unknown: a single short attempt.
+  try {
+    await locator.first().selectOption({ value: valueStr }, { timeout: 2000 });
+    return true;
+  } catch (_) {
+    log.warn('Could not match select option', { value: valueStr });
+    return false;
+  }
 }
 
 async function selectRadio(page, descriptor, value) {
