@@ -23,7 +23,7 @@ Scout is a personal job-application copilot. It finds new developer jobs, lets y
 - **Discovery** — an n8n workflow pulls remote developer jobs from Himalayas, Arbeitnow and RemoteOK, de-duplicates them (tracking parameters and trailing slashes are ignored), and stores them in Supabase.
 - **Dashboard** — a Next.js app with a pipeline board (Discovered → Queued → Filling → Review → Applied), live stats, a details drawer with the full fill report, and a *Teach Scout* control for fields it skipped. Dark and light themes, a command menu (`Ctrl K`), and a demo mode (`http://localhost:3000/?demo=1`) that runs on sample data with no backend. See [`dashboard/README.md`](dashboard/README.md).
 - **Autofill** — a Playwright bot detects the ATS (Greenhouse, Lever, Ashby, Workday, iCIMS, SmartRecruiters; anything else uses a generic adapter), reads the form, and fills what it can. Free-text questions get a short answer written by an LLM from your profile only; weak answers are left blank.
-- **Safety** — never touched, whatever a rule or the model says: demographic/EEOC fields, legal-status questions (work authorization, visa sponsorship, citizenship, criminal record, security clearance), passwords, CAPTCHAs and tracking fields. Low-confidence fields are skipped and listed in the fill report. Scout never clicks Submit; on multi-step forms it only clicks a plain *Continue/Next* button.
+- **Safety** — Scout leaves these alone and never sends them to the model: demographic/EEOC fields, legal-status questions (work authorization, visa sponsorship, citizenship, criminal record, background checks, security clearance), questions about other people (emergency contacts, references), passwords, CAPTCHAs and tracking fields. It judges a field by its label, the heading of its section and its answer options, and it never ticks a checkbox. This is pattern-based, so it cannot be perfect: you always review the form. Low-confidence fields are skipped and listed in the fill report. Scout never clicks Submit; on multi-step forms it only clicks a plain *Continue/Next* button, and never on a Review or Submit step.
 
 ## Prerequisites
 
@@ -68,12 +68,12 @@ Scout is a personal job-application copilot. It finds new developer jobs, lets y
 | Platform | How it is handled | Verified |
 |---|---|---|
 | Greenhouse, Lever, Ashby | dedicated adapters with the platform's own field ids | fixture forms in real Chromium |
-| Workday | multi-step wizard: fills each step, advances with *Save and Continue*, stops before *Submit*; leaves sign-in walls to you | fixture wizard |
-| iCIMS | fills the application inside its iframe | fixture page |
+| Workday | multi-step wizard: waits for each step to settle, fills it, advances with *Save and Continue*, and stops at the Review step; stops at a sign-in wall | fixture wizard |
+| iCIMS | fills the application inside its iframe (not other frames); stops at a login step | fixture page |
 | SmartRecruiters | reads forms built from web components (open shadow DOM) | fixture page |
 | Anything else | generic adapter (labels, names, types) | fixture form |
 
-The adapters are written from each platform's public markup conventions and exercised against fixture pages that mimic them. **They have not been verified against live company sites**, so expect to review every filled form (you always do — Scout never submits). Workday and similar tenants require an account; Scout does not handle credentials, so sign in in the open browser and queue the job again.
+The adapters are written from each platform's public markup conventions and exercised against fixture pages that mimic them. **They have not been verified against live company sites**, so expect to review every filled form (you always do — Scout never submits). Scout never handles credentials, and each run starts a fresh browser, so it **cannot resume after you sign in**: on a Workday or iCIMS tenant that requires an account, Scout stops at the sign-in page and tells you so; sign in and complete the application yourself in the browser it leaves open. A run that finds no form fields at all (for example the job posting instead of the application form) is also reported as needing you, not as filled.
 
 ## Environment variables
 
@@ -136,6 +136,7 @@ node n8n/build-workflow.js    # regenerate n8n/scout-job-discovery.json after ed
 - **I edited the workflow file and n8n did not pick it up** — the import only runs the first time, so edits made in the n8n UI are never overwritten. To replace the workflow with the file on disk: `docker compose run --rm --entrypoint n8n n8n-import import:workflow --input=/workflows/scout-job-discovery.json`, then publish it again.
 - **n8n refuses to start** — `N8N_ENCRYPTION_KEY` is missing from `.env`. Do not change it afterwards or n8n cannot read its saved credentials.
 - **The browser closes immediately** — `HEADLESS` is `true` (or the server runs on Linux). Set `HEADLESS=false`.
+- **An application says "Scout found no form fields"** — the apply link opens the job posting (or an "Apply" choice page), not the form. Open it in the browser Scout leaves open, click through to the form and fill it by hand.
 - **Some listings open an aggregator page, not the company's form** — Himalayas links to its own listing page. Click through to the employer's apply link, or apply manually.
 
 ## Layout
