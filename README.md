@@ -91,6 +91,7 @@ The adapters are written from each platform's public markup conventions and exer
 | `HOST` | server | Address to bind (default `127.0.0.1`, loopback only; the Docker image sets `0.0.0.0`) |
 | `DASHBOARD_ORIGIN` | server | Browser origin(s) allowed to call the server, comma-separated (default `http://localhost:3000`, `http://127.0.0.1:3000`) |
 | `HEADLESS` | server | `false` shows the browser (needed for review); defaults to headless on Linux/cloud |
+| `QUEUE_POLL_MS` | server | How often the fallback poll looks for queued applications (default `30000`; Realtime normally wakes it sooner) |
 | `LOG_LEVEL` | server | `debug`, `info`, `warn`, `error` |
 | `PROFILE_JSON` | server | Profile as one-line JSON, used if `profile.json` is missing |
 | `NEXT_PUBLIC_LOCAL_API` | dashboard | Apply server URL (default `http://localhost:3001`) |
@@ -125,6 +126,7 @@ With no provider configured Scout still works: fields are matched by rules only 
 npm test                      # unit tests plus real-browser end-to-end tests (node:test; needs Chromium: npx playwright install chromium)
 bash scripts/verify-schema.sh    # applies the schema to a throwaway Postgres container and checks the access rules (needs Docker)
 bash scripts/verify-postgrest.sh # runs the real PostgREST API over that schema and checks the requests Scout makes (needs Docker)
+npm run e2e:stack             # whole system on a throwaway stack: live job discovery through n8n, the apply server, the dashboard in a browser, Teach Scout, failure and crash recovery (needs Docker; a few minutes; touches no real account)
 node n8n/build-workflow.js    # regenerate n8n/scout-job-discovery.json after editing n8n/normalize.js
 ```
 

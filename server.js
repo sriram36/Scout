@@ -118,6 +118,8 @@ const queue = createQueue({
   },
   runApply: runQueuedApplication,
   log,
+  // How often the fallback poll looks for queued applications (Realtime normally wakes it sooner).
+  intervalMs: Number(process.env.QUEUE_POLL_MS) || 30000,
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
