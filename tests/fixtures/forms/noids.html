@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Apply — fields without ids or names</title></head>
+<body>
+  <form id="f">
+    <!-- A button-like input comes first: the extractor skips it but a naive index locator counts it -->
+    <input type="submit" value="Save draft">
+    <div><span>Phone</span><input type="tel"></div>
+    <div><span>Email</span><input type="email"></div>
+    <div><span>First Name</span><input type="text"></div>
+  </form>
+  <script>
+    document.getElementById('f').addEventListener('submit', function (e) { e.preventDefault(); window.__submitted = true; });
+    window.__submitted = false;
+  </script>
+</body>
+</html>

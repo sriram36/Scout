@@ -182,7 +182,8 @@ function buildLocator(page, selector) {
   switch (selector.type) {
     case 'id':    return page.locator(`#${CSS_escape(selector.value)}`);
     case 'name':  return page.locator(`[name="${selector.value}"]`);
-    case 'index': return page.locator('input, textarea, select').nth(selector.value);
+    case 'scout': return page.locator(`[data-scout-field="${selector.value}"]`);
+    case 'index': return page.locator('input, textarea, select').nth(selector.value); // legacy
     default:      throw new Error(`Unknown selector type: ${selector.type}`);
   }
 }

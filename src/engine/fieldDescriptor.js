@@ -17,12 +17,22 @@
 const DOM_EXTRACTOR_SCRIPT = /* javascript */ `
 (function extractFields() {
   const INTERACTIVE_SELECTORS = 'input:not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]), textarea, select';
-  const elements = Array.from(document.querySelectorAll(INTERACTIVE_SELECTORS));
+
+  // Collect from the document and, recursively, from open shadow roots (web-component forms).
+  function collect(root, out) {
+    root.querySelectorAll(INTERACTIVE_SELECTORS).forEach(function (el) { out.push(el); });
+    root.querySelectorAll('*').forEach(function (el) { if (el.shadowRoot) collect(el.shadowRoot, out); });
+    return out;
+  }
+  const elements = collect(document, []);
+  // Forget tags from a previous extraction (multi-step forms re-extract on every step).
+  elements.forEach(function (el) { el.removeAttribute('data-scout-field'); });
 
   function getLabel(el) {
     // 1. Explicit <label for="id">
+    const root = el.getRootNode();
     if (el.id) {
-      const lbl = document.querySelector('label[for="' + CSS.escape(el.id) + '"]');
+      const lbl = root.querySelector('label[for="' + CSS.escape(el.id) + '"]');
       if (lbl) return lbl.innerText.trim();
     }
     // 2. Wrapping <label>
@@ -38,7 +48,7 @@ const DOM_EXTRACTOR_SCRIPT = /* javascript */ `
     if (el.getAttribute('aria-labelledby')) {
       const ids = el.getAttribute('aria-labelledby').split(' ');
       const texts = ids.map(id => {
-        const el2 = document.getElementById(id);
+        const el2 = root.querySelector('#' + CSS.escape(id));
         return el2 ? el2.innerText.trim() : '';
       }).filter(Boolean);
       if (texts.length) return texts.join(' ');
@@ -85,10 +95,10 @@ const DOM_EXTRACTOR_SCRIPT = /* javascript */ `
     }
     // For radio groups — find all radios with the same name
     if (el.type === 'radio' && el.name) {
-      return Array.from(document.querySelectorAll('input[type="radio"][name="' + CSS.escape(el.name) + '"]'))
+      return Array.from(el.getRootNode().querySelectorAll('input[type="radio"][name="' + CSS.escape(el.name) + '"]'))
         .map(r => {
           let lbl = null;
-          if (r.id) { const l = document.querySelector('label[for="' + CSS.escape(r.id) + '"]'); if (l) lbl = l.innerText.trim(); }
+          if (r.id) { const l = r.getRootNode().querySelector('label[for="' + CSS.escape(r.id) + '"]'); if (l) lbl = l.innerText.trim(); }
           if (!lbl) { const pl = r.closest('label'); if (pl) { const c = pl.cloneNode(true); c.querySelectorAll('input').forEach(n=>n.remove()); lbl = c.innerText.trim(); } }
           return { value: r.value, label: lbl || r.value };
         });
@@ -98,14 +108,18 @@ const DOM_EXTRACTOR_SCRIPT = /* javascript */ `
 
   function isVisible(el) {
     const style = window.getComputedStyle(el);
-    return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0' && el.offsetParent !== null;
+    return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0' && el.getClientRects().length > 0;
   }
 
   // Build a unique stable selector for each element (used internally, not sent to LLM)
   function buildSelector(el, index) {
     if (el.id) return { type: 'id', value: el.id };
     if (el.name) return { type: 'name', value: el.name };
-    return { type: 'index', value: index };
+    // No stable handle: tag the element so the executor can find exactly this one again
+    // (an index into a locator breaks as soon as any skipped input precedes it).
+    const tag = 'field_' + index;
+    el.setAttribute('data-scout-field', tag);
+    return { type: 'scout', value: tag };
   }
 
   const descriptors = [];
