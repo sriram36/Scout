@@ -94,9 +94,10 @@ DROP POLICY IF EXISTS applications_anon_insert ON applications;
 CREATE POLICY applications_anon_insert ON applications FOR INSERT TO anon
   WITH CHECK (status = 'pending_application');
 
+-- Not while the server is working on it (applying, application_opened, form_analyzed).
 DROP POLICY IF EXISTS applications_anon_update ON applications;
 CREATE POLICY applications_anon_update ON applications FOR UPDATE TO anon
-  USING (true)
+  USING (status IN ('Discovered', 'pending_application', 'autofill_completed', 'awaiting_review', 'submitted', 'failed'))
   WITH CHECK (status IN ('pending_application', 'Discovered', 'submitted'));
 
 -- ── Privileges (column-level for anon writes) ───────────────────────────────

@@ -61,6 +61,12 @@ expect_ok   "anon can reset to Discovered and clear the error" anon "UPDATE appl
 expect_fail "anon cannot forge autofill_completed" anon "UPDATE applications SET status = 'autofill_completed';"
 expect_fail "anon cannot set an unknown status" anon "UPDATE applications SET status = 'bogus';"
 expect_fail "anon cannot DELETE applications" anon "DELETE FROM applications;"
+pg -c "UPDATE applications SET status = 'applying' WHERE listing_id = '$L1';" >/dev/null 2>&1
+printf "SET ROLE anon; UPDATE applications SET status = 'pending_application', status_updated_at = now();" | pg >/dev/null 2>&1
+expect_eq   "anon cannot re-queue or edit an application while it is running (row left unchanged)" applying "SELECT status FROM applications WHERE listing_id = '$L1';"
+pg -c "UPDATE applications SET status = 'failed' WHERE listing_id = '$L1';" >/dev/null 2>&1
+printf "SET ROLE anon; UPDATE applications SET status = 'pending_application', status_updated_at = now();" | pg >/dev/null 2>&1
+expect_eq   "anon can retry a failed application (row changed)" pending_application "SELECT status FROM applications WHERE listing_id = '$L1';"
 
 # ── constraints (as superuser) ───────────────────────────────────────────────
 expect_fail "duplicate canonical_url is rejected" postgres "INSERT INTO listings(title,company,source,apply_url,canonical_url) VALUES ('d','d','d','https://a.com/1','https://a.com/1');"
