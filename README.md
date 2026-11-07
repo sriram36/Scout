@@ -114,8 +114,8 @@ With no provider configured Scout still works: fields are matched by rules only 
 
 ## Security notes
 
-- The dashboard's anon key can read everything and can only queue, reset or mark-submitted an application, and only through the three status columns. It cannot write listings or forge pipeline states. The rules are in the schema file.
-- `fill_report` is readable with the anon key because the dashboard shows it. Keep your Supabase URL private; it is a personal project, not a multi-user product.
+- The dashboard's anon key can read everything and can only queue, reset or mark-submitted an application, and only through the three status columns. It cannot write listings, forge pipeline states, or touch an application while the server is working on it. The rules are in the schema file; if you set up Supabase earlier, run `n8n/supabase-schema.sql` again to get the latest rules (it is safe to re-run).
+- `fill_report` is readable with the anon key because the dashboard shows it, and it contains the values Scout typed (your email, phone, links and any AI-written answers). Keep your Supabase URL private; it is a personal project, not a multi-user product.
 - The apply server listens on loopback only and accepts browser calls only from the dashboard origin, so other websites and other machines cannot make it fill forms with your details. n8n is likewise published on `127.0.0.1` only.
 - `.env` and `profile.json` are git-ignored. Never commit them.
 
