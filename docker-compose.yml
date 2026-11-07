@@ -1,0 +1,49 @@
+# Runs n8n (job discovery) in Docker. The apply server and dashboard run on the host:
+# the review step needs a visible browser, which a container cannot provide.
+#
+#   docker compose up -d          # starts n8n and imports the Scout workflow
+#   open http://localhost:5678    # create the n8n owner account, then activate the workflow
+#
+# Variables come from the root .env (see .env.example).
+
+x-n8n-env: &n8n-env
+  N8N_ENCRYPTION_KEY: "${N8N_ENCRYPTION_KEY:?Set N8N_ENCRYPTION_KEY in .env - generate one with openssl rand -hex 24}"
+  GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-UTC}
+  TZ: ${GENERIC_TIMEZONE:-UTC}
+  # The workflow reads $env.SUPABASE_* inside expressions; n8n blocks that by default.
+  N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+  N8N_DIAGNOSTICS_ENABLED: "false"
+  SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+  SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+
+services:
+  # One-shot: loads n8n/scout-job-discovery.json (fixed id, so re-runs update it in place).
+  n8n-import:
+    image: docker.n8n.io/n8nio/n8n:2.46.6
+    restart: "no"
+    command: ["import:workflow", "--input=/workflows/scout-job-discovery.json"]
+    environment: *n8n-env
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n:/workflows:ro
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:2.46.6
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment: *n8n-env
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      n8n-import:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5678/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+volumes:
+  n8n_data:
