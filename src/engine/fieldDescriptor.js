@@ -135,13 +135,23 @@ const DOM_EXTRACTOR_SCRIPT = /* javascript */ `
   }
 
   const descriptors = [];
-  const seenRadioNames = new Set();
+  const seenRadioGroups = new Map();   // root -> names already extracted from that root
+  // A radio name used in more than one root cannot be addressed by a locator without hitting the
+  // wrong group, so those groups are flagged and left to the candidate.
+  const radioRootsByName = Object.create(null);
+  elements.forEach(function (el) {
+    if (el.type !== 'radio' || !el.name) return;
+    (radioRootsByName[el.name] = radioRootsByName[el.name] || new Set()).add(el.getRootNode());
+  });
 
   elements.forEach((el, index) => {
     // Skip duplicate radio buttons — we only need one per group
     if (el.type === 'radio') {
-      if (seenRadioNames.has(el.name)) return;
-      seenRadioNames.add(el.name);
+      const root = el.getRootNode();
+      let names = seenRadioGroups.get(root);
+      if (!names) { names = new Set(); seenRadioGroups.set(root, names); }
+      if (names.has(el.name)) return;
+      names.add(el.name);
     }
 
     const label = getLabel(el);
@@ -161,6 +171,7 @@ const DOM_EXTRACTOR_SCRIPT = /* javascript */ `
       sectionHeading: getSectionHeading(el),
       helpText:     getNearbyHelp(el),
       options:      getOptions(el),
+      ambiguousGroup: el.type === 'radio' && !!el.name && radioRootsByName[el.name].size > 1,
     };
     descriptors.push(descriptor);
   });

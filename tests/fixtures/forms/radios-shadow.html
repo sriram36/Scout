@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Two components reusing a radio name</title></head>
+<body>
+  <div id="a"></div>
+  <div id="b"></div>
+  <script>
+    function mount(host, legend) {
+      document.getElementById(host).attachShadow({ mode: 'open' }).innerHTML =
+        '<fieldset><legend>' + legend + '</legend>' +
+        '<label><input type="radio" name="choice" value="y"> Yes</label>' +
+        '<label><input type="radio" name="choice" value="n"> No</label></fieldset>';
+    }
+    mount('a', 'Option A');
+    mount('b', 'Option B');
+  </script>
+</body>
+</html>

@@ -3,11 +3,13 @@
 /**
  * Generic ATS Adapter
  *
- * Used when the platform is unknown or has no dedicated adapter. Runs the shared pipeline
- * with no platform-specific hooks.
+ * Used when the platform is unknown or has no dedicated adapter. Runs the shared pipeline on the
+ * page, or on the iframe that holds the form when the page itself has little to fill (company
+ * career pages often embed their ATS form).
  */
 
 const { runPipeline } = require('./pipeline');
+const { pickTarget } = require('./frames');
 
 const name = 'generic';
 
@@ -16,8 +18,9 @@ const name = 'generic';
  * @param {object} job
  * @param {{useLLM?: boolean, generateAnswers?: boolean}} options
  */
-function fill(page, job = {}, options = {}) {
-  return runPipeline(page, job, options, { platform: name });
+async function fill(page, job = {}, options = {}) {
+  const target = await pickTarget(page);
+  return runPipeline(target, job, options, { platform: name });
 }
 
 module.exports = { name, fill };

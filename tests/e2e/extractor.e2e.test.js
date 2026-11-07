@@ -8,6 +8,7 @@ const { useTestProfile } = require('../helpers/testProfile');
 useTestProfile();
 const { serveFixtures, launch } = require('../helpers/browser');
 const generic = require('../../src/adapters/generic');
+const { extractFields } = require('../../src/engine/fieldDescriptor');
 
 const JOB = { id: 'j', title: 'Engineer', company: 'Acme', description: '', apply_url: 'x' };
 const NO_LLM = { useLLM: false, generateAnswers: false };
@@ -58,4 +59,22 @@ test('duplicate ids (wrapper + input, and the same id in several shadow roots) n
   assert.equal(await inRoot('c3'), 'https://test-candidate.dev');
   assert.equal(result.report.errors, 0);
   assert.equal(result.report.filled, 5, 'first name, email and three shadow-root fields');
+});
+
+test('radio groups that reuse a name in different shadow roots are both extracted', async (t) => {
+  const page = await withPage('radios-shadow.html', t);
+  const radios = (await extractFields(page)).filter(d => d.type === 'radio');
+  assert.equal(radios.length, 2, 'one descriptor per group, and each shadow root has its own group');
+  assert.ok(radios.every(r => r.ambiguousGroup === true), 'the shared name cannot be told apart by a locator, so both are flagged');
+});
+
+test('the generic adapter fills the form inside an iframe when the page itself has almost nothing', async (t) => {
+  const page = await withPage('icims.html', t);
+  const result = await generic.fill(page, JOB, NO_LLM);
+
+  const frame = page.frameLocator('#icims_content_iframe');
+  assert.equal(await frame.locator('#firstname').inputValue(), 'Test');
+  assert.equal(await frame.locator('#emailaddr').inputValue(), 'test.candidate@example.com');
+  assert.equal(await page.inputValue('#site-search'), '', 'the host page search box is not the form');
+  assert.ok(result.report.filled >= 4);
 });

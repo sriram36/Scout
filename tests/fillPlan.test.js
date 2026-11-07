@@ -113,3 +113,28 @@ test('every radio of a group under a protected heading is skipped as protected',
   assert.equal(entry.action, 'skip');
   assert.equal(entry.meaning, 'protected');
 });
+
+test('buildFillPlan reuses cached matches instead of classifying again', async () => {
+  const d = field({ label: 'Zzz unrecognisable' });
+  const cache = new Map([[d.elementId, { meaning: 'personal.email', confidence: 0.99, stage: 3, action: 'fill' }]]);
+  const [entry] = await plan([d], { matchCache: cache });
+  assert.equal(entry.meaning, 'personal.email');
+  assert.equal(entry.stage, 3);
+});
+
+test('buildFillPlan fills the cache for every field it classified', async () => {
+  const a = field({ label: 'Email address', type: 'email' });
+  const b = field({ label: 'Zzz unrecognisable' });
+  const protectedField = field({ label: 'Gender' });
+  const cache = new Map();
+  await plan([a, b, protectedField], { matchCache: cache });
+  assert.deepEqual([...cache.keys()].sort(), [a.elementId, b.elementId].sort(), 'protected fields are never classified');
+  assert.equal(cache.get(a.elementId).meaning, 'personal.email');
+});
+
+test('a radio group whose name is reused by another component is left to the candidate', async () => {
+  const d = field({ label: 'Do you agree?', type: 'radio', tag: 'input', ambiguousGroup: true, options: [{ value: 'y', label: 'Yes' }, { value: 'n', label: 'No' }], _knownMeaning: 'personal.email' });
+  const [entry] = await plan([d]);
+  assert.equal(entry.action, 'skip');
+  assert.match(entry.skipReason, /choose it yourself/i);
+});

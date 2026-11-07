@@ -44,7 +44,7 @@ const log = require('../logger');
  * @param {object[]} options.aiAnswers — pre-generated [{elementId, answer}] for free-text fields
  * @returns {Promise<FillPlan[]>}
  */
-async function buildFillPlan(descriptors, { platform = 'unknown', useLLM = true, aiAnswers = [] } = {}) {
+async function buildFillPlan(descriptors, { platform = 'unknown', useLLM = true, aiAnswers = [], matchCache } = {}) {
   const log = require('../logger').child ? require('../logger').child({ component: 'FillPlan' }) : require('../logger');
   const aiAnswerMap = new Map(aiAnswers.map(a => [a.elementId, a]));
 
@@ -72,11 +72,28 @@ async function buildFillPlan(descriptors, { platform = 'unknown', useLLM = true,
   }
 
   // ── Classification pass ───────────────────────────────────────────────────
-  const matches = await matchFields(safeDescriptors, { platform, useLLM });
+  const matches = await matchFields(safeDescriptors, { platform, useLLM, cache: matchCache });
 
   for (let i = 0; i < safeDescriptors.length; i++) {
     const desc  = safeDescriptors[i];
     const match = matches[i];
+
+    // A radio group whose name another component reuses cannot be told apart by a locator.
+    if (desc.ambiguousGroup) {
+      plan.push({
+        elementId:  desc.elementId,
+        selector:   desc.selector,
+        descriptor: desc,
+        meaning:    match.meaning,
+        value:      null,
+        confidence: match.confidence,
+        stage:      match.stage,
+        action:     'skip',
+        skipReason: 'Radio group name is reused by another component — choose it yourself',
+        isAIGenerated: false,
+      });
+      continue;
+    }
 
     // Never tick or untick a checkbox from a profile value (consent boxes, "I agree" boxes):
     // there is no boolean in the profile to base it on, and a phone number is not a "yes".

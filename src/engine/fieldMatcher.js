@@ -248,9 +248,15 @@ async function matchField(descriptor, { platform = 'unknown', useLLM = true } = 
  * Classify all descriptors. Returns parallel array of FieldMatch objects.
  */
 async function matchFields(descriptors, options = {}) {
+  const { cache } = options;   // optional Map(elementId -> match): a second pass must not re-classify
   const results = [];
   for (const descriptor of descriptors) {
+    if (cache && cache.has(descriptor.elementId)) {
+      results.push(cache.get(descriptor.elementId));
+      continue;
+    }
     const match = await matchField(descriptor, options);
+    if (cache) cache.set(descriptor.elementId, match);
     results.push(match);
   }
   return results;

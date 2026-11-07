@@ -77,13 +77,14 @@ async function runPipeline(target, job = {}, { useLLM = true, generateAnswers = 
 
   const descriptors = annotate ? extracted.map(annotate) : extracted;
 
-  let plan = await buildFillPlan(descriptors, { platform, useLLM });
+  const matchCache = new Map();   // the plan is built twice when AI answers exist; classify each field once
+  let plan = await buildFillPlan(descriptors, { platform, useLLM, matchCache });
 
   if (generateAnswers && job.title) {
     const aiAnswers = await generateAnswersForPlan(descriptors, plan, job);
     if (aiAnswers.length > 0) {
       log.info(`[${platform}] Generated ${aiAnswers.length} AI answers`);
-      plan = await buildFillPlan(descriptors, { platform, useLLM, aiAnswers });
+      plan = await buildFillPlan(descriptors, { platform, useLLM, aiAnswers, matchCache });
     }
   }
 

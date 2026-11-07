@@ -51,5 +51,9 @@ test('EEO, work-authorization, consent and emergency-contact fields stay empty a
   const sent = JSON.stringify(llm.requests.flatMap(r => r.body.messages.filter(m => m.role === 'user').map(m => m.content)));
   assert.doesNotMatch(sent, /Male|Female|Decline to self|Voluntary|Disability|Work authorization|Hispanic|American Indian|do not wish|Emergency|text messages/i);
   assert.match(sent, /project you are proud of/i, 'the free-text question was the one thing asked');
+  const classifications = llm.requests
+    .map(r => r.body.messages.find(m => m.role === 'user').content)
+    .filter(c => /Classify this form field/.test(c) && /project you are proud of/.test(c));
+  assert.equal(classifications.length, 1, 'the plan is built twice but the field is classified once');
   assert.equal(result.report.errors, 0);
 });
