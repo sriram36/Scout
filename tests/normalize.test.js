@@ -185,3 +185,14 @@ test('formatSalary', () => {
   assert.equal(formatSalary('a', 'b'), 'Competitive');
   assert.equal(formatSalary(0, 0), 'Competitive');
 });
+
+test('salary uses the currency symbol the source gave, defaulting to dollars', () => {
+  const salaryFor = (currency) => normalize({ himalayas: [himalayasJob({ currency })] })[0].salary;
+  assert.equal(salaryFor('EUR'), '€80,000 - €120,000');
+  assert.equal(salaryFor('GBP'), '£80,000 - £120,000');
+  assert.equal(salaryFor('INR'), '₹80,000 - ₹120,000');
+  assert.equal(salaryFor('CHF'), 'CHF 80,000 - CHF 120,000');
+  assert.equal(salaryFor('USD'), '$80,000 - $120,000');
+  assert.equal(salaryFor(undefined), '$80,000 - $120,000');
+  assert.equal(formatSalary(80000, 120000, 'EUR'), '€80,000 - €120,000');
+});

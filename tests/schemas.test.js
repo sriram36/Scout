@@ -77,3 +77,10 @@ test('apply: jobId must be a uuid (application ids are uuids)', () => {
   assert.equal(applyBodySchema.safeParse({ url: 'https://a.com', jobId: 'abc' }).success, false);
   assert.equal(applyBodySchema.safeParse({ url: 'https://a.com', jobId: '3f2b8c1e-9d4a-4e6b-8a57-1c2d3e4f5a6b' }).success, true);
 });
+
+test('correction: fieldSignature is capped at 500 characters', () => {
+  const ok = correctionBodySchema.safeParse({ fieldSignature: 'a'.repeat(500), meaning: 'personal.email' });
+  const tooLong = correctionBodySchema.safeParse({ fieldSignature: 'a'.repeat(501), meaning: 'personal.email' });
+  assert.equal(ok.success, true);
+  assert.equal(tooLong.success, false);
+});

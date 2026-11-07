@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { laneForStatus } from "@/lib/pipeline";
 import { normalizeReport } from "@/lib/normalize";
 import { buildTimeline } from "@/lib/timeline";
+import { safeHttpUrl } from "@/lib/safeUrl";
 import { formatDateTime, relativeTime } from "@/lib/time";
 import type { Job, JobAction, SkippedDetail } from "@/lib/types";
 import { Icon } from "./Icon";
@@ -63,6 +64,7 @@ export function Drawer({
   const lane = laneForStatus(job.status);
   const report = normalizeReport(app?.fill_report);
   const timeline = buildTimeline(job);
+  const postingUrl = safeHttpUrl(job.url);   // listing URLs come from third-party APIs: http(s) only
 
   return (
     <div className="drawer-root">
@@ -88,15 +90,17 @@ export function Drawer({
           </dl>
           <div className="drawer-actions">
             <JobActions job={job} busy={busy} onAction={onAction} withSecondary />
-            {job.url && (
-              <a className="btn btn-secondary" href={job.url} target="_blank" rel="noopener noreferrer">
+            {postingUrl && (
+              <a className="btn btn-secondary" href={postingUrl} target="_blank" rel="noopener noreferrer">
                 <Icon name="external" size={15} />Open posting
               </a>
             )}
           </div>
           {lane === "review" && (
             <p className="drawer-callout">
-              Scout filled the form and stopped before submitting. Check it in the browser window, submit it yourself, then mark it as submitted here.
+              {report?.note
+                ? "Read the note below, finish anything Scout could not do in the browser window, submit it yourself, then mark it as submitted here."
+                : "Scout filled the form and stopped before submitting. Check it in the browser window, submit it yourself, then mark it as submitted here."}
             </p>
           )}
         </header>

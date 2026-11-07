@@ -27,7 +27,7 @@ const applyBodySchema = z.object({
 const correctionBodySchema = z.object({
   platform:       z.string().min(1).default('generic'),
   domain:         z.string().optional(),
-  fieldSignature: z.string().min(1),
+  fieldSignature: z.string().min(1).max(500),
   meaning:        z.enum(CORRECTABLE_MEANINGS),
   confidence:     z.number().min(0).max(1).default(1),
 });

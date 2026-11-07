@@ -39,10 +39,14 @@ function canonicalizeUrl(url) {
   return `${scheme}://${host}${pathname}${kept.length > 0 ? `?${kept.join('&')}` : ''}`;
 }
 
-function formatSalary(min, max) {
+const CURRENCY_SYMBOLS = { USD: '$', EUR: '€', GBP: '£', INR: '₹', JPY: '¥', CAD: 'CA$', AUD: 'A$' };
+
+function formatSalary(min, max, currency) {
   const ok = (n) => typeof n === 'number' && Number.isFinite(n) && n > 0;
   if (!ok(min) || !ok(max)) return 'Competitive';
-  return `$${min.toLocaleString('en-US')} - $${max.toLocaleString('en-US')}`;
+  const code = typeof currency === 'string' ? currency.trim().toUpperCase() : '';
+  const symbol = !code ? '$' : (CURRENCY_SYMBOLS[code] || `${code} `);
+  return `${symbol}${min.toLocaleString('en-US')} - ${symbol}${max.toLocaleString('en-US')}`;
 }
 
 function cleanText(value, limit) {
@@ -73,7 +77,7 @@ function mapHimalayas(job) {
     title: job.title,
     company: job.companyName,
     location: restrictions.length > 0 ? restrictions.join(', ') : 'Remote',
-    salary: formatSalary(job.minSalary, job.maxSalary),
+    salary: formatSalary(job.minSalary, job.maxSalary, job.currency),
     description: job.excerpt,
     url: job.applicationLink || job.guid,
     postedDate: toIso(job.pubDate, true),
