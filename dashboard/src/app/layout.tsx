@@ -1,15 +1,30 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Bricolage_Grotesque, Instrument_Sans } from "next/font/google";
+import { THEME_BOOT_SCRIPT } from "@/lib/themeScript";
 import "./globals.css";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+const display = Bricolage_Grotesque({ variable: "--font-display", subsets: ["latin"], weight: ["500", "600", "700"] });
+const text = Instrument_Sans({ variable: "--font-text", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Scout — Your calmer job search",
-  description: "A focused workspace for discovering and automating job applications.",
+  title: "Scout: job application pipeline",
+  description: "Track discovered roles, queue auto-fill and review applications before they go out.",
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "#121a22" },
+    { media: "(prefers-color-scheme: light)", color: "#eef2f6" },
+  ],
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
-  return <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}><body className="min-h-full">{children}</body></html>;
+  return (
+    <html lang="en" data-theme="dark" className={`${display.variable} ${text.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+      </head>
+      <body>{children}</body>
+    </html>
+  );
 }
