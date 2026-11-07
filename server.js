@@ -33,8 +33,7 @@ const { createCorsOptions, resolveHost } = require('./src/api/access');
 const { detectATS, getAdapter }          = require('./src/adapters/index');
 const { applyBodySchema, validateBody } = require('./src/api/schemas');
 const { createRouter }                   = require('./src/api/routes');
-const { buildApplicationUpdate }         = require('./src/api/applicationUpdate');
-const { captureScreenshotDataUrl }       = require('./src/engine/screenshot');
+const { createApplier }                  = require('./src/pipeline/applyToJob');
 const { createQueue }                    = require('./src/queue/applicationQueue');
 
 // ─── Startup ──────────────────────────────────────────────────────────────────
@@ -59,97 +58,26 @@ app.use(express.json());
 
 app.use(createRouter({ getProfile, isHeadless, upsertFieldMapping })); // /health, /profile, /meanings, /corrections
 
+const applyToJob = createApplier({
+  launchBrowser: () => chromium.launch({ headless: isHeadless, args: ['--no-sandbox', '--disable-setuid-sandbox'] }),
+  detectATS,
+  getAdapter,
+  updateApplication,
+  isHeadless,
+  log,
+});
+
 /**
  * POST /apply
  * Body: { url, jobId?, title?, company?, description? }
  *
- * Launches Playwright, detects ATS, runs the fill pipeline,
- * and returns the fill report. Does NOT auto-submit.
+ * Launches Playwright, detects the ATS, runs the fill pipeline and returns the fill report.
+ * Does NOT auto-submit.
  */
 app.post('/apply', validateBody(applyBodySchema), async (req, res) => {
-  let browser = null;
-  const startedAt = new Date().toISOString();
-
   try {
-    const { url, jobId, title, company, description } = req.body;
-
-    const job = { id: jobId, title, company, description, apply_url: url };
-
-    log.info('Starting application', { url: url.substring(0, 80), title, company });
-
-    browser = await chromium.launch({
-      headless: isHeadless,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
-
-    const page = await browser.newPage();
-    await page.setDefaultTimeout(30000);
-
-    // Status: opening browser
-    if (jobId) await updateApplication(jobId, { status: 'application_opened', started_at: startedAt });
-
-    await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
-
-    // Detect ATS
-    const atsName = await detectATS(url, page);
-    const adapter = getAdapter(atsName);
-    log.info('ATS detected', { ats: atsName });
-
-    if (jobId) await updateApplication(jobId, { status: 'form_analyzed', ats_platform: atsName });
-
-    // Run the fill pipeline
-    const result = await adapter.fill(page, job, { useLLM: true, generateAnswers: true });
-
-    const update = buildApplicationUpdate(result, atsName);
-    if (jobId) {
-      await updateApplication(jobId, update);
-    }
-
-    log.info('Autofill complete — awaiting human review', {
-      ats: atsName,
-      filled: result.filled?.length,
-      skipped: result.skipped?.length,
-      errors: result.errors?.length,
-    });
-
-    // In headless mode, take a screenshot and close
-    let screenshot = null;
-    if (isHeadless) {
-      screenshot = await captureScreenshotDataUrl(page);
-      await browser.close();
-      browser = null;
-    }
-    // In headed mode, keep browser open for human review — DO NOT close
-
-    res.json({
-      platform: atsName,
-      filled:   result.filled,
-      skipped:  result.skipped,
-      errors:   result.errors,
-      report:   result.report,
-      screenshot,
-      status: update.status === 'awaiting_review' || !isHeadless ? 'awaiting_review' : 'autofill_completed',
-      note: update.fill_report?.note || (isHeadless
-        ? 'Application drafted in cloud browser.'
-        : 'Browser is open — please review all fields, then submit manually.'),
-    });
-
+    res.json(await applyToJob(req.body));
   } catch (error) {
-    log.error('Application pipeline error', { error: error.message, stack: error.stack?.substring(0, 500) });
-
-    if (browser) {
-      try { await browser.close(); } catch (_) {}
-    }
-
-    const { jobId } = req.body || {};
-    if (jobId) {
-      await updateApplication(jobId, {
-        status: 'failed',
-        error_message: error.message,
-        completed_at: new Date().toISOString(),
-      }).catch(() => {});
-    }
-
     res.status(500).json({ error: error.message });
   }
 });
@@ -164,30 +92,19 @@ app.use((err, req, res, next) => {
 // ─── Application queue (Supabase Realtime + fallback poll) ────────────────────
 
 /**
- * Run one queued application by calling this server's own /apply route.
- * Throws on failure so the queue can mark the application failed.
+ * Run one queued application. Throws on failure so the queue can mark it failed.
+ * (Called directly: an HTTP request to this server would hit fetch's 5-minute header timeout on a long fill.)
  */
 async function runQueuedApplication(appRecord) {
   const job = appRecord.listings;
-
-  const resp = await fetch(`http://localhost:${PORT}/apply`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      url:         job.apply_url || job.canonical_url,
-      jobId:       appRecord.id,
-      title:       job.title,
-      company:     job.company,
-      description: job.description || '',
-    }),
+  const input = applyBodySchema.parse({
+    url:         job.apply_url || job.canonical_url,
+    jobId:       appRecord.id,
+    title:       job.title,
+    company:     job.company,
+    description: job.description || '',
   });
-
-  const result = await resp.json().catch(() => ({}));
-  if (!resp.ok || result.error) {
-    throw new Error(result.error || `Apply request failed (${resp.status})`);
-  }
-
-  // Status is updated inside /apply — just log here
+  await applyToJob(input);
   log.info('Application autofill complete — awaiting human review', { id: appRecord.id });
 }
 
