@@ -12,6 +12,7 @@
 
 const { resolvePath } = require('../config/profile');
 const { lookupFieldMapping } = require('../db/supabase');
+const { normalizeText, fieldSignature } = require('./fieldIdentity');
 const log = require('../logger');
 
 // ─── Stage 1: Deterministic Rule Map ─────────────────────────────────────────
@@ -104,10 +105,6 @@ const SEMANTIC_ALIASES = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function normalizeText(text) {
-  return (text || '').toLowerCase().replace(/[_\-.,\/#!$%^&*;:{}=`~()]/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
 /**
  * Compute profile value for a meaning path.
  * 'personal.fullName' is a virtual computed path.
@@ -125,6 +122,11 @@ function resolveValue(meaning) {
 // ─── Stage 1 ──────────────────────────────────────────────────────────────────
 
 function stage1Match(descriptor) {
+  // An adapter that knows the platform's own field ids can pre-classify a field.
+  if (descriptor._knownMeaning) {
+    return { meaning: descriptor._knownMeaning, confidence: 0.99, stage: 1 };
+  }
+
   const candidates = [
     descriptor.name,
     descriptor.id,
@@ -216,9 +218,8 @@ async function stage3Match(descriptor, platform) {
  */
 async function matchField(descriptor, { platform = 'unknown', useLLM = true } = {}) {
   // 0. Check learned mappings from Supabase (fastest)
-  const fieldSignature = [descriptor.name, descriptor.id, normalizeText(descriptor.label)].filter(Boolean).join('|');
   try {
-    const learned = await lookupFieldMapping(platform, fieldSignature);
+    const learned = await lookupFieldMapping(platform, fieldSignature(descriptor));
     if (learned && learned.confidence >= 0.70) {
       return { meaning: learned.meaning, confidence: learned.confidence, stage: 0, action: 'fill' };
     }

@@ -27,12 +27,14 @@ function loadProfile() {
   if (_profile) return _profile;
 
   let raw = null;
-  const profilePath = path.join(__dirname, '..', '..', 'profile.json');
+  // SCOUT_PROFILE_PATH lets tests (and unusual deployments) point at another file.
+  const profilePath = process.env.SCOUT_PROFILE_PATH
+    || path.join(__dirname, '..', '..', 'profile.json');
 
   if (fs.existsSync(profilePath)) {
     try {
       raw = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
-      log.info('Profile loaded from profile.json');
+      log.info('Profile loaded from file', { custom: !!process.env.SCOUT_PROFILE_PATH });
     } catch (e) {
       log.error('Failed to parse profile.json', { error: e.message });
     }

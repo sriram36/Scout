@@ -78,24 +78,43 @@ async function buildFillPlan(descriptors, { platform = 'unknown', useLLM = true,
     const desc  = safeDescriptors[i];
     const match = matches[i];
 
-    // Low confidence → skip
-    if (isTooUncertain(match.confidence)) {
-      plan.push({
-        elementId:  desc.elementId,
-        selector:   desc.selector,
-        descriptor: desc,
-        meaning:    match.meaning,
-        value:      null,
-        confidence: match.confidence,
-        stage:      match.stage,
-        action:     'skip',
-        skipReason: `Low confidence (${(match.confidence * 100).toFixed(0)}%) — manual review`,
-        isAIGenerated: false,
-      });
+    // A pre-generated AI answer for a free-text question. (Safety-blocked fields never get
+    // here.) Weak or empty answers are left for the candidate rather than guessed.
+    const aiEntry = aiAnswerMap.get(desc.elementId);
+    if (aiEntry) {
+      const answer = typeof aiEntry.answer === 'string' ? aiEntry.answer.trim() : '';
+      if (!answer || isTooUncertain(aiEntry.confidence)) {
+        plan.push({
+          elementId:  desc.elementId,
+          selector:   desc.selector,
+          descriptor: desc,
+          meaning:    match.meaning,
+          value:      null,
+          confidence: aiEntry.confidence || 0,
+          stage:      match.stage,
+          action:     'skip',
+          skipReason: 'AI answer too uncertain — write this one yourself',
+          isAIGenerated: false,
+        });
+      } else {
+        plan.push({
+          elementId:  desc.elementId,
+          selector:   desc.selector,
+          descriptor: desc,
+          meaning:    match.meaning === 'unknown' ? 'free-text answer' : match.meaning,
+          value:      answer,
+          confidence: aiEntry.confidence,
+          stage:      3,
+          action:     determineAction(desc),
+          skipReason: null,
+          isAIGenerated: true,
+        });
+      }
       continue;
     }
 
-    // Unknown meaning → skip
+    // Unknown meaning → skip. (Checked before uncertainty: an unknown field has confidence 0,
+    // and the answer generator looks for exactly this reason to find free-text questions.)
     if (match.meaning === 'unknown') {
       plan.push({
         elementId:  desc.elementId,
@@ -112,20 +131,19 @@ async function buildFillPlan(descriptors, { platform = 'unknown', useLLM = true,
       continue;
     }
 
-    // Check for a pre-generated AI answer for this field (free-text questions)
-    const aiEntry = aiAnswerMap.get(desc.elementId);
-    if (aiEntry) {
+    // Low confidence → skip
+    if (isTooUncertain(match.confidence)) {
       plan.push({
         elementId:  desc.elementId,
         selector:   desc.selector,
         descriptor: desc,
         meaning:    match.meaning,
-        value:      aiEntry.answer,
-        confidence: aiEntry.confidence || match.confidence,
+        value:      null,
+        confidence: match.confidence,
         stage:      match.stage,
-        action:     determineAction(desc),
-        skipReason: null,
-        isAIGenerated: true,
+        action:     'skip',
+        skipReason: `Low confidence (${(match.confidence * 100).toFixed(0)}%) — manual review`,
+        isAIGenerated: false,
       });
       continue;
     }

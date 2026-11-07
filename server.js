@@ -31,7 +31,8 @@ const {
 } = require('./src/db/supabase');
 const { createCorsOptions, resolveHost } = require('./src/api/access');
 const { detectATS, getAdapter }          = require('./src/adapters/index');
-const { applyBodySchema, correctionBodySchema, validateBody } = require('./src/api/schemas');
+const { applyBodySchema, validateBody } = require('./src/api/schemas');
+const { createRouter }                   = require('./src/api/routes');
 const { captureScreenshotDataUrl }       = require('./src/engine/screenshot');
 const { createQueue }                    = require('./src/queue/applicationQueue');
 
@@ -55,30 +56,7 @@ app.use(express.json());
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
-/**
- * GET /profile
- * Returns a safe subset of the candidate profile for the dashboard.
- * Never returns email, phone, or resume path.
- */
-app.get('/profile', (req, res) => {
-  const p = getProfile();
-  res.json({
-    name: `${p.personal?.firstName || ''} ${p.personal?.lastName || ''}`.trim(),
-    location: p.personal?.location,
-    links: p.links,
-    education: p.education,
-    skills: p.skills,
-    preferences: p.preferences,
-  });
-});
-
-/**
- * GET /health
- * Simple health check for the dashboard to verify local server is running.
- */
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', version: '2.0.0', headless: isHeadless });
-});
+app.use(createRouter({ getProfile, isHeadless, upsertFieldMapping })); // /health, /profile, /meanings, /corrections
 
 /**
  * POST /apply
@@ -182,24 +160,6 @@ app.post('/apply', validateBody(applyBodySchema), async (req, res) => {
   }
 });
 
-/**
- * POST /corrections
- * Body: { platform, fieldSignature, meaning, confidence }
- * Records a user correction for the learning system.
- */
-app.post('/corrections', validateBody(correctionBodySchema), async (req, res) => {
-  try {
-    const { platform, domain, fieldSignature, meaning, confidence } = req.body;
-
-    await upsertFieldMapping({ platform, domain, fieldSignature, meaning, confidence });
-    log.info('Field mapping correction recorded', { platform, fieldSignature, meaning });
-    res.json({ success: true });
-  } catch (e) {
-    log.error('Failed to record correction', { error: e.message });
-    res.status(500).json({ error: e.message });
-  }
-});
-
 // ─── Global error handler ─────────────────────────────────────────────────────
 
 app.use((err, req, res, next) => {
@@ -255,7 +215,7 @@ const HOST = resolveHost();
 
 app.listen(PORT, HOST, () => {
   log.info(`Scout apply-service ready on ${HOST}:${PORT}`);
-  log.info('Endpoints: POST /apply, GET /profile, GET /health, POST /corrections');
+  log.info('Endpoints: POST /apply, GET /health, GET /profile, GET /meanings, POST /corrections');
 
   if (getSupabase()) {
     queue.start();

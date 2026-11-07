@@ -50,6 +50,26 @@ const CAPTCHA_PATTERNS = [
   /h-captcha/i,
 ];
 
+/**
+ * Legal-status questions (work authorization, sponsorship, citizenship, criminal record,
+ * clearance). Wrong answers can have legal consequences, so the candidate answers these.
+ */
+const LEGAL_STATUS_PATTERNS = [
+  /sponsor/i,
+  /work.?auth/i,
+  /authori[sz]ed.{0,30}work/i,
+  /legally.{0,30}(authori[sz]ed|eligible|permitted|allowed)/i,
+  /right.?to.?work/i,
+  /work.?permit/i,
+  /visa/i,
+  /citizen/i,
+  /immigration/i,
+  /convict/i,
+  /felon/i,
+  /criminal/i,
+  /clearance/i,
+];
+
 /** ATS internal / tracking fields that should never be manipulated */
 const TRACKING_PATTERNS = [
   /^origin$/i,
@@ -122,7 +142,7 @@ function shouldNeverTouch(fieldOrString) {
     if (BLOCKED_EXACT.has(text)) return true;
 
     // Pattern checks
-    for (const pattern of [...DEMOGRAPHIC_PATTERNS, ...CAPTCHA_PATTERNS, ...TRACKING_PATTERNS, ...SECURITY_PATTERNS]) {
+    for (const pattern of [...DEMOGRAPHIC_PATTERNS, ...CAPTCHA_PATTERNS, ...LEGAL_STATUS_PATTERNS, ...TRACKING_PATTERNS, ...SECURITY_PATTERNS]) {
       if (pattern.test(text)) return true;
     }
   }
@@ -145,13 +165,14 @@ function isTooUncertain(confidence, threshold = 0.65) {
 function getSkipReason(fieldOrString) {
   const texts = typeof fieldOrString === 'string'
     ? [fieldOrString]
-    : [fieldOrString?.name, fieldOrString?.id, fieldOrString?.label].filter(Boolean);
+    : [fieldOrString?.name, fieldOrString?.id, fieldOrString?.label, fieldOrString?.ariaLabel, fieldOrString?.placeholder].filter(Boolean);
 
   for (const text of texts) {
     if (!text) continue;
     if (DEMOGRAPHIC_PATTERNS.some(p => p.test(text))) return 'EEOC/demographic field — protected';
     if (CAPTCHA_PATTERNS.some(p => p.test(text)))     return 'CAPTCHA — requires human action';
     if (SECURITY_PATTERNS.some(p => p.test(text)))    return 'Security field — never auto-filled';
+    if (LEGAL_STATUS_PATTERNS.some(p => p.test(text))) return 'Legal-status question — answer this yourself';
     if (TRACKING_PATTERNS.some(p => p.test(text)))    return 'ATS tracking field — skipped';
     if (BLOCKED_EXACT.has(text))                       return 'Blocked field name — skipped';
     if (fieldOrString?.type === 'hidden')              return 'Hidden field — skipped';

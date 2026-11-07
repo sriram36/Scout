@@ -16,6 +16,7 @@
  */
 
 const fs  = require('fs');
+const { describeEntry } = require('./fieldIdentity');
 const log = require('../logger').child
   ? require('../logger').child({ component: 'Executor' })
   : require('../logger');
@@ -34,7 +35,7 @@ async function executeFillPlan(page, fillPlan) {
 
   for (const entry of fillPlan) {
     if (entry.action === 'skip') {
-      skipped.push({ field: entry.elementId, meaning: entry.meaning, reason: entry.skipReason });
+      skipped.push({ ...describeEntry(entry), reason: entry.skipReason });
       continue;
     }
 
@@ -42,8 +43,7 @@ async function executeFillPlan(page, fillPlan) {
       const success = await executeEntry(page, entry);
       if (success) {
         filled.push({
-          field:        entry.elementId,
-          meaning:      entry.meaning,
+          ...describeEntry(entry),
           value:        entry.value,
           confidence:   entry.confidence,
           stage:        entry.stage,
@@ -51,11 +51,11 @@ async function executeFillPlan(page, fillPlan) {
           via:          stageLabel(entry.stage),
         });
       } else {
-        skipped.push({ field: entry.elementId, meaning: entry.meaning, reason: 'Execution returned false' });
+        skipped.push({ ...describeEntry(entry), reason: 'Execution returned false' });
       }
     } catch (e) {
       log.warn('Field execution error', { field: entry.elementId, error: e.message });
-      errors.push({ field: entry.elementId, meaning: entry.meaning, error: e.message });
+      errors.push({ ...describeEntry(entry), error: e.message });
     }
   }
 

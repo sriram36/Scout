@@ -5,6 +5,7 @@
  */
 
 const { z } = require('zod');
+const { CORRECTABLE_MEANINGS } = require('../engine/meanings');
 
 const httpUrl = z.string().refine((value) => {
   try {
@@ -27,7 +28,7 @@ const correctionBodySchema = z.object({
   platform:       z.string().min(1).default('generic'),
   domain:         z.string().optional(),
   fieldSignature: z.string().min(1),
-  meaning:        z.string().min(1),
+  meaning:        z.enum(CORRECTABLE_MEANINGS),
   confidence:     z.number().min(0).max(1).default(1),
 });
 
